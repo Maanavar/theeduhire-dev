@@ -14,9 +14,10 @@ export default function JobListItem({ job, isSelected, onClick }: Props) {
   const boardLabel = job.board === "STATE_BOARD" ? "State Board" : job.board;
 
   const jobTypeLabel =
-    job.jobType === "PART_TIME"  ? "Part-Time"  :
-    job.jobType === "CONTRACT"   ? "Contract"   :
-    job.jobType === "VISITING"   ? "Visiting"   : null;
+    job.jobType === "FULL_TIME"     ? "Full-Time"     :
+    job.jobType === "PART_TIME"     ? "Part-Time"     :
+    job.jobType === "CONTRACT"      ? "Contract"      :
+    job.jobType === "VISITING_FACULTY" ? "Visiting Faculty" : null;
 
   return (
     <div
