@@ -9,19 +9,19 @@ export default function DashboardLayout({
   return (
     <>
       <Navbar />
-      <div className="min-h-[calc(100vh-60px)] bg-gradient-to-br from-gray-50/50 to-white">
-        <div className="max-w-[1400px] mx-auto px-5 lg:px-8">
-          <div className="flex gap-8 py-6 lg:py-8">
-            {/* Sidebar - Hidden on mobile, fixed width on desktop */}
-            <aside className="hidden lg:block w-[280px] shrink-0">
-              <div className="sticky top-24">
+      <div className="min-h-[calc(100vh-58px)]" style={{ background: "var(--surface-base)" }}>
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex gap-7 py-6 lg:py-8">
+            {/* Sidebar */}
+            <aside className="hidden lg:block w-[260px] shrink-0">
+              <div className="sticky top-[74px]">
                 <DashboardSidebar />
               </div>
             </aside>
 
-            {/* Main Content */}
+            {/* Main */}
             <main className="flex-1 min-w-0">
-              <div className="max-w-[1000px] space-y-6">
+              <div className="max-w-[960px] space-y-5">
                 {children}
               </div>
             </main>

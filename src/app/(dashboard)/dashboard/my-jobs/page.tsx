@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatSalary, timeAgo, getBoardLabel } from "@/lib/utils";
-import { Plus, Users, Eye, ToggleLeft, ToggleRight, Loader2 } from "lucide-react";
+import { Plus, Users, Eye, Loader2, Briefcase, ArrowRight } from "lucide-react";
 import StatsCards from "@/components/dashboard/stats-cards";
 import { toast } from "@/components/ui/toast";
 
@@ -21,12 +21,40 @@ interface MyJob {
   _count: { applications: number };
 }
 
-const statusColors: Record<string, string> = {
-  ACTIVE: "bg-green-50 text-green-700",
-  DRAFT: "bg-gray-100 text-gray-600",
-  CLOSED: "bg-red-50 text-red-600",
-  EXPIRED: "bg-amber-50 text-amber-700",
+const STATUS_CONFIG: Record<string, { label: string; dot: string; bg: string; text: string; border: string }> = {
+  ACTIVE:  { label: "Active",   dot: "bg-emerald-500", bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-100" },
+  DRAFT:   { label: "Draft",    dot: "bg-gray-400",    bg: "bg-gray-100",   text: "text-gray-600",   border: "border-gray-200" },
+  CLOSED:  { label: "Closed",   dot: "bg-red-400",     bg: "bg-red-50",     text: "text-red-600",    border: "border-red-100" },
+  EXPIRED: { label: "Expired",  dot: "bg-amber-400",   bg: "bg-amber-50",   text: "text-amber-700",  border: "border-amber-100" },
 };
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.DRAFT;
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
+      {cfg.label}
+    </span>
+  );
+}
+
+function JobCardSkeleton() {
+  return (
+    <div className="card p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-2/5 rounded-lg" />
+          <div className="skeleton h-3.5 w-1/3 rounded" />
+          <div className="skeleton h-3 w-1/4 rounded" />
+        </div>
+        <div className="flex gap-2">
+          <div className="skeleton h-8 w-20 rounded-xl" />
+          <div className="skeleton h-8 w-24 rounded-xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function MyJobsPage() {
   const [jobs, setJobs] = useState<MyJob[]>([]);
@@ -70,92 +98,116 @@ export default function MyJobsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      {/* Page header */}
+      <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="font-display text-[26px] font-bold">My Job Listings</h1>
-          <p className="text-[14px] text-gray-500 mt-0.5">Manage your posted teaching positions</p>
+          <h1 className="font-display text-[26px] font-bold text-gray-900 tracking-[-0.02em]">
+            My Job Listings
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Manage your posted teaching positions
+          </p>
         </div>
         <Link
           href="/dashboard/post-job"
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13.5px] font-semibold bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600 transition-all duration-[120ms] shadow-brand hover:-translate-y-px active:translate-y-0 shrink-0"
         >
-          <Plus size={15} /> Post New Job
+          <Plus size={14} /> Post New Job
         </Link>
       </div>
+
       <StatsCards />
 
       {loading ? (
         <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="bg-white border border-gray-100 rounded-2xl p-5 animate-pulse">
-              <div className="h-5 w-1/3 bg-gray-100 rounded mb-2" />
-              <div className="h-4 w-1/4 bg-gray-100 rounded mb-3" />
-              <div className="flex gap-2">
-                <div className="h-6 w-16 bg-gray-100 rounded-full" />
-                <div className="h-6 w-20 bg-gray-100 rounded-full" />
-              </div>
-            </div>
-          ))}
+          {Array.from({ length: 3 }).map((_, i) => <JobCardSkeleton key={i} />)}
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-100 rounded-2xl p-5 text-center">
-          <p className="text-[14px] text-red-600">{error}</p>
+        <div className="card p-8 text-center">
+          <p className="text-sm text-red-600 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600 shadow-brand"
+          >
+            Reload
+          </button>
         </div>
       ) : jobs.length === 0 ? (
-        <div className="text-center py-16 bg-white border border-gray-100 rounded-2xl">
-          <h3 className="font-display text-xl text-gray-500 italic mb-2">No jobs posted yet</h3>
-          <p className="text-[14px] text-gray-400 mb-5">Create your first teaching position listing</p>
-          <Link href="/dashboard/post-job" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[14px] font-semibold bg-brand-500 text-white hover:bg-brand-600">
-            <Plus size={15} /> Post a Job
+        <div className="card p-12 text-center">
+          <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Briefcase size={24} className="text-gray-400" />
+          </div>
+          <h3 className="font-display text-[18px] font-semibold text-gray-500 italic mb-2">
+            No listings yet
+          </h3>
+          <p className="text-sm text-gray-400 mb-6 max-w-[260px] mx-auto">
+            Create your first teaching position to start attracting qualified educators
+          </p>
+          <Link
+            href="/dashboard/post-job"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600 transition-all shadow-brand hover:-translate-y-px"
+          >
+            <Plus size={14} /> Post a Job <ArrowRight size={14} />
           </Link>
         </div>
       ) : (
         <div className="space-y-3">
           {jobs.map((job) => (
-            <div key={job.id} className="bg-white border border-gray-100 rounded-2xl p-5 hover:border-gray-200 transition-colors">
+            <div
+              key={job.id}
+              className="card p-5 transition-all duration-[120ms] hover:shadow-md"
+            >
               <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <h3 className="text-[15px] font-semibold truncate">{job.title}</h3>
-                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${statusColors[job.status] || "bg-gray-100"}`}>
-                      {job.status}
-                    </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2.5 mb-1 flex-wrap">
+                    <h3 className="text-[15px] font-semibold text-gray-900 truncate">
+                      {job.title}
+                    </h3>
+                    <StatusBadge status={job.status} />
                   </div>
-                  <p className="text-[13px] text-gray-500">
+                  <p className="text-sm text-gray-500 font-medium mb-1.5">
                     {job.subject} · {getBoardLabel(job.board)} · Grade {job.gradeLevel}
                   </p>
-                  <p className="text-[13px] text-gray-400 mt-1">
-                    {formatSalary(job.salaryMin, job.salaryMax)} · Posted {timeAgo(job.postedAt)}
-                  </p>
+                  <div className="flex gap-3 text-xs text-gray-400 font-medium">
+                    <span className="text-brand-600 font-semibold">
+                      {formatSalary(job.salaryMin, job.salaryMax)}
+                    </span>
+                    <span>Posted {timeAgo(job.postedAt)}</span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                {/* Actions */}
+                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                   <button
                     onClick={() => toggleStatus(job.id, job.status)}
                     disabled={togglingId === job.id || job.status === "DRAFT"}
-                    title={job.status === "ACTIVE" ? "Close listing" : "Reopen listing"}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px] font-medium bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-40"
+                    className={[
+                      "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all duration-[120ms] disabled:opacity-40",
+                      job.status === "ACTIVE"
+                        ? "border-red-100 text-red-600 bg-red-50 hover:bg-red-100"
+                        : "border-emerald-100 text-emerald-700 bg-emerald-50 hover:bg-emerald-100",
+                    ].join(" ")}
                   >
                     {togglingId === job.id
-                      ? <Loader2 size={14} className="animate-spin" />
-                      : job.status === "ACTIVE"
-                        ? <ToggleRight size={14} className="text-green-500" />
-                        : <ToggleLeft size={14} />
+                      ? <Loader2 size={13} className="animate-spin" />
+                      : null
                     }
                     {job.status === "ACTIVE" ? "Close" : "Reopen"}
                   </button>
+
                   <Link
                     href={`/dashboard/my-jobs/${job.id}/applicants`}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px] font-medium bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border border-black/[0.08] text-gray-600 bg-white hover:bg-gray-50 hover:border-black/[0.13] transition-all duration-[120ms]"
                   >
-                    <Users size={14} />
-                    {job._count.applications} applicant{job._count.applications !== 1 ? "s" : ""}
+                    <Users size={13} />
+                    {job._count.applications} Applicant{job._count.applications !== 1 ? "s" : ""}
                   </Link>
+
                   <Link
                     href={`/jobs/${job.id}`}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px] font-medium bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border border-black/[0.08] text-gray-600 bg-white hover:bg-gray-50 hover:border-black/[0.13] transition-all duration-[120ms]"
                   >
-                    <Eye size={14} /> View
+                    <Eye size={13} /> View
                   </Link>
                 </div>
               </div>

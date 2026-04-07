@@ -2,23 +2,44 @@
 
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Props {
   open: boolean;
   onClose: () => void;
   title: string;
+  description?: string;
   children: React.ReactNode;
   maxWidth?: string;
+  footer?: React.ReactNode;
 }
 
-export default function Modal({ open, onClose, title, children, maxWidth = "max-w-lg" }: Props) {
+export default function Modal({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  maxWidth = "max-w-lg",
+  footer,
+}: Props) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     document.addEventListener("keydown", handleKey);
     document.body.style.overflow = "hidden";
+    // Focus trap — focus first focusable element
+    setTimeout(() => {
+      const el = contentRef.current?.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      el?.focus();
+    }, 50);
     return () => {
       document.removeEventListener("keydown", handleKey);
       document.body.style.overflow = "";
@@ -30,26 +51,61 @@ export default function Modal({ open, onClose, title, children, maxWidth = "max-
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-fade-in"
+      style={{ backgroundColor: "rgba(0,0,0,0.35)", backdropFilter: "blur(4px)" }}
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div
-        className={`w-full ${maxWidth} bg-white rounded-2xl shadow-xl`}
-        style={{ animation: "modalIn 0.18s ease-out" }}
+        ref={contentRef}
+        className={cn(
+          "w-full bg-white rounded-3xl shadow-2xl flex flex-col animate-scale-in",
+          "max-h-[90vh]",
+          maxWidth
+        )}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="font-display text-[18px] font-bold">{title}</h2>
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 pt-6 pb-4 flex-shrink-0">
+          <div>
+            <h2
+              id="modal-title"
+              className="font-display text-[20px] font-bold text-gray-900 tracking-[-0.02em]"
+            >
+              {title}
+            </h2>
+            {description && (
+              <p className="text-sm text-gray-500 mt-1 leading-relaxed">{description}</p>
+            )}
+          </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            aria-label="Close"
+            className="ml-4 flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-[120ms] mt-0.5"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
-        <div className="px-6 py-5 max-h-[80vh] overflow-y-auto">{children}</div>
+
+        {/* Divider */}
+        <div className="h-px bg-black/[0.05] flex-shrink-0" />
+
+        {/* Body */}
+        <div className="px-6 py-5 overflow-y-auto scrollbar-thin flex-1">
+          {children}
+        </div>
+
+        {/* Footer */}
+        {footer && (
+          <>
+            <div className="h-px bg-black/[0.05] flex-shrink-0" />
+            <div className="px-6 py-4 flex-shrink-0">
+              {footer}
+            </div>
+          </>
+        )}
       </div>
-      <style>{`@keyframes modalIn { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }`}</style>
     </div>
   );
 }

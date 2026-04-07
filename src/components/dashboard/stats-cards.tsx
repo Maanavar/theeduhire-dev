@@ -18,35 +18,59 @@ interface SchoolStats {
   newApplicants: number;
 }
 
-function StatCard({ icon, label, value, sub }: {
+function StatCard({
+  icon,
+  label,
+  value,
+  sub,
+  trend,
+  color = "brand",
+}: {
   icon: React.ReactNode;
   label: string;
   value: number | string;
   sub?: string;
+  trend?: "up" | "neutral";
+  color?: "brand" | "blue" | "green" | "orange";
 }) {
+  const colorMap = {
+    brand:  { bg: "bg-brand-50",  text: "text-brand-600",  icon: "text-brand-500" },
+    blue:   { bg: "bg-blue-50",   text: "text-blue-600",   icon: "text-blue-500" },
+    green:  { bg: "bg-emerald-50",text: "text-emerald-600",icon: "text-emerald-500" },
+    orange: { bg: "bg-orange-50", text: "text-orange-600", icon: "text-orange-500" },
+  };
+  const c = colorMap[color];
+
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-5">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-8 h-8 bg-brand-50 rounded-lg flex items-center justify-center text-brand-500">
+    <div className="card p-5 group">
+      <div className="flex items-start justify-between mb-4">
+        <div className={`w-8 h-8 ${c.bg} rounded-lg flex items-center justify-center ${c.icon} transition-transform duration-200 group-hover:scale-105`}>
           {icon}
         </div>
-        <span className="text-[12.5px] font-medium text-gray-500">{label}</span>
+        {trend === "up" && (
+          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+            ↑ Active
+          </span>
+        )}
       </div>
-      <div className="font-display text-[28px] font-bold text-gray-900 leading-none">{value}</div>
-      {sub && <p className="text-[12px] text-gray-400 mt-1">{sub}</p>}
+      <div className={`font-display text-[28px] font-bold leading-none tracking-[-0.02em] mb-1.5 ${c.text}`}>
+        {value}
+      </div>
+      <p className="text-xs font-medium text-gray-500">{label}</p>
+      {sub && <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>}
     </div>
   );
 }
 
 function SkeletonCard() {
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-5 animate-pulse">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-8 h-8 bg-gray-100 rounded-lg" />
-        <div className="h-3 w-24 bg-gray-100 rounded" />
+    <div className="card p-5">
+      <div className="flex items-start justify-between mb-4">
+        <div className="w-8 h-8 skeleton rounded-lg" />
       </div>
-      <div className="h-8 w-16 bg-gray-100 rounded" />
-      <div className="h-3 w-28 bg-gray-100 rounded mt-2" />
+      <div className="h-7 w-14 skeleton rounded-lg mb-2" />
+      <div className="h-3 w-20 skeleton rounded" />
+      <div className="h-3 w-16 skeleton rounded mt-1" />
     </div>
   );
 }
@@ -71,7 +95,6 @@ export default function StatsCards() {
             const total = jobs.length;
             const active = jobs.filter((j) => j.status === "ACTIVE").length;
             const totalApplicants = jobs.reduce((sum: number, j: any) => sum + (j._count?.applications ?? 0), 0);
-            // "new" = applicants on jobs posted in the last 7 days
             const cutoff = Date.now() - 7 * 86400000;
             const newApplicants = jobs
               .filter((j) => new Date(j.postedAt).getTime() > cutoff)
@@ -103,7 +126,7 @@ export default function StatsCards() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-7">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
       </div>
     );
@@ -111,22 +134,25 @@ export default function StatsCards() {
 
   if (isSchool && schoolStats) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-7">
-        <StatCard icon={<Briefcase size={16} />} label="Total listings" value={schoolStats.total} />
-        <StatCard icon={<TrendingUp size={16} />} label="Active jobs" value={schoolStats.active} sub={`${schoolStats.total - schoolStats.active} closed`} />
-        <StatCard icon={<Users size={16} />} label="Total applicants" value={schoolStats.totalApplicants} />
-        <StatCard icon={<FileText size={16} />} label="New applicants" value={schoolStats.newApplicants} sub="Last 7 days" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <StatCard color="brand" icon={<Briefcase size={15} />} label="Total Listings"     value={schoolStats.total} />
+        <StatCard color="green" icon={<TrendingUp size={15} />} label="Active Jobs"        value={schoolStats.active} trend="up" sub={`${schoolStats.total - schoolStats.active} closed`} />
+        <StatCard color="blue"  icon={<Users size={15} />}      label="Total Applicants"   value={schoolStats.totalApplicants} />
+        <StatCard color="orange"icon={<FileText size={15} />}   label="New This Week"      value={schoolStats.newApplicants} sub="Last 7 days" />
       </div>
     );
   }
 
   if (!isSchool && teacherStats) {
+    const rate = teacherStats.total > 0
+      ? Math.round((teacherStats.shortlisted / teacherStats.total) * 100)
+      : 0;
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-7">
-        <StatCard icon={<FileText size={16} />} label="Applications" value={teacherStats.total} />
-        <StatCard icon={<CheckCircle2 size={16} />} label="Shortlisted" value={teacherStats.shortlisted} sub={`${teacherStats.total > 0 ? Math.round((teacherStats.shortlisted / teacherStats.total) * 100) : 0}% success rate`} />
-        <StatCard icon={<TrendingUp size={16} />} label="Hired" value={teacherStats.hired} />
-        <StatCard icon={<Bookmark size={16} />} label="Saved jobs" value={teacherStats.saved} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <StatCard color="brand"  icon={<FileText size={15} />}     label="Applications"   value={teacherStats.total} />
+        <StatCard color="blue"   icon={<CheckCircle2 size={15} />} label="Shortlisted"    value={teacherStats.shortlisted} sub={`${rate}% success rate`} />
+        <StatCard color="green"  icon={<TrendingUp size={15} />}   label="Hired"          value={teacherStats.hired} trend={teacherStats.hired > 0 ? "up" : undefined} />
+        <StatCard color="orange" icon={<Bookmark size={15} />}     label="Saved Jobs"     value={teacherStats.saved} />
       </div>
     );
   }
