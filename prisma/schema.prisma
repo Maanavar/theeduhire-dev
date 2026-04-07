@@ -1,0 +1,265 @@
+// ═══════════════════════════════════════════════
+// EduHire — Prisma Schema
+// Database: PostgreSQL (Supabase)
+// Auth: NextAuth.js
+// ═══════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // Supabase connection pooling
+}
+
+// ─── Enums ───────────────────────────────────
+
+enum UserRole {
+  TEACHER
+  SCHOOL_ADMIN
+  ADMIN
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  VISITING_FACULTY
+}
+
+enum JobStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  EXPIRED
+}
+
+enum ApplicationStatus {
+  PENDING
+  REVIEWED
+  SHORTLISTED
+  REJECTED
+  HIRED
+}
+
+enum Board {
+  CBSE
+  ICSE
+  STATE_BOARD
+  IB
+  CAMBRIDGE
+  OTHER
+}
+
+// ─── User (single auth table for all roles) ──
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  email          String    @unique
+  name           String
+  role           UserRole  @default(TEACHER)
+  phone          String?
+  avatarUrl      String?   @map("avatar_url")
+  emailVerified  Boolean   @default(false) @map("email_verified")
+  hashedPassword String?   @map("hashed_password") // null for OAuth users
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  teacherProfile TeacherProfile?
+  schoolProfile  SchoolProfile?
+  applications   Application[]
+  savedJobs      SavedJob[]
+  resumes        Resume[]
+  jobPostings    JobPosting[]    // jobs this user posted
+
+  @@map("users")
+}
+
+// ─── Teacher Profile ─────────────────────────
+
+model TeacherProfile {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @unique @map("user_id") @db.Uuid
+  qualification   String?
+  experience      String?  // e.g. "3-5 years"
+  currentSchool   String?  @map("current_school")
+  city            String?
+  bio             String?  @db.Text
+  subjects        String[] // array of subjects they teach
+  preferredBoards String[] @map("preferred_boards") // boards they prefer
+  preferredGrades String[] @map("preferred_grades") // grade levels they prefer
+  expectedSalary  Int?     @map("expected_salary")  // monthly in INR
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([city])
+  @@index([subjects])
+  @@map("teacher_profiles")
+}
+
+// ─── School Profile ──────────────────────────
+
+model SchoolProfile {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @unique @map("user_id") @db.Uuid
+  schoolName String   @map("school_name")
+  city       String
+  board      Board
+  address    String?  @db.Text
+  website    String?
+  about      String?  @db.Text
+  logoUrl    String?  @map("logo_url")
+  verified   Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobPostings JobPosting[]
+
+  @@index([city])
+  @@index([board])
+  @@index([verified])
+  @@map("school_profiles")
+}
+
+// ─── Job Posting ─────────────────────────────
+
+model JobPosting {
+  id          String    @id @default(uuid()) @db.Uuid
+  schoolId    String    @map("school_id") @db.Uuid
+  postedBy    String    @map("posted_by") @db.Uuid
+  title       String
+  subject     String
+  board       Board
+  gradeLevel  String    @map("grade_level") // e.g. "9-12", "Pre-K", "1-5"
+  jobType     JobType   @default(FULL_TIME) @map("job_type")
+  experience  String?   // e.g. "3-5 years"
+  salaryMin   Int?      @map("salary_min")  // monthly INR
+  salaryMax   Int?      @map("salary_max")
+  description String    @db.Text
+  status      JobStatus @default(ACTIVE)
+  postedAt    DateTime  @default(now()) @map("posted_at") @db.Timestamptz
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  school       SchoolProfile    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  poster       User             @relation(fields: [postedBy], references: [id])
+  requirements JobRequirement[]
+  benefits     JobBenefit[]
+  applications Application[]
+  savedBy      SavedJob[]
+
+  // Indexes for filtering & search
+  @@index([status])
+  @@index([subject])
+  @@index([board])
+  @@index([gradeLevel])
+  @@index([salaryMin, salaryMax])
+  @@index([postedAt(sort: Desc)])
+  @@index([schoolId])
+  @@index([status, postedAt(sort: Desc)]) // composite: active jobs newest first
+  @@map("job_postings")
+}
+
+// ─── Job Requirements (one per row) ──────────
+
+model JobRequirement {
+  id        String @id @default(uuid()) @db.Uuid
+  jobId     String @map("job_id") @db.Uuid
+  text      String
+  sortOrder Int    @default(0) @map("sort_order")
+
+  // Relations
+  job JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("job_requirements")
+}
+
+// ─── Job Benefits (one per row) ──────────────
+
+model JobBenefit {
+  id        String @id @default(uuid()) @db.Uuid
+  jobId     String @map("job_id") @db.Uuid
+  text      String
+  sortOrder Int    @default(0) @map("sort_order")
+
+  // Relations
+  job JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("job_benefits")
+}
+
+// ─── Application ─────────────────────────────
+
+model Application {
+  id          String            @id @default(uuid()) @db.Uuid
+  jobId       String            @map("job_id") @db.Uuid
+  applicantId String            @map("applicant_id") @db.Uuid
+  coverLetter String?           @map("cover_letter") @db.Text
+  resumeId    String?           @map("resume_id") @db.Uuid
+  status      ApplicationStatus @default(PENDING)
+  schoolNotes String?           @map("school_notes") @db.Text // internal notes
+  appliedAt   DateTime          @default(now()) @map("applied_at") @db.Timestamptz
+  reviewedAt  DateTime?         @map("reviewed_at") @db.Timestamptz
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  job       JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applicant User       @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  resume    Resume?    @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+
+  // Prevent duplicate applications
+  @@unique([jobId, applicantId])
+  @@index([jobId])
+  @@index([applicantId])
+  @@index([status])
+  @@index([appliedAt(sort: Desc)])
+  @@map("applications")
+}
+
+// ─── Resume (file uploads) ───────────────────
+
+model Resume {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  fileUrl    String   @map("file_url")  // Supabase Storage URL
+  fileName   String   @map("file_name")
+  fileSize   Int      @map("file_size") // bytes
+  uploadedAt DateTime @default(now()) @map("uploaded_at") @db.Timestamptz
+
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@index([userId])
+  @@map("resumes")
+}
+
+// ─── Saved Jobs (bookmarks) ──────────────────
+
+model SavedJob {
+  id      String   @id @default(uuid()) @db.Uuid
+  userId  String   @map("user_id") @db.Uuid
+  jobId   String   @map("job_id") @db.Uuid
+  savedAt DateTime @default(now()) @map("saved_at") @db.Timestamptz
+
+  // Relations
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobId]) // can't save the same job twice
+  @@index([userId])
+  @@map("saved_jobs")
+}
