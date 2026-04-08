@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const { error: uploadError } = await supabaseAdmin.storage
-      .from("resumes")
+      .from("Resumes")
       .upload(storagePath, buffer, {
         contentType: file.type,
         upsert: false,
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { data: urlData } = supabaseAdmin.storage
-      .from("resumes")
+      .from("Resumes")
       .getPublicUrl(storagePath);
 
     const resume = await prisma.resume.create({

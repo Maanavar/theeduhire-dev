@@ -53,6 +53,18 @@ enum Board {
   OTHER
 }
 
+enum AvailabilityStatus {
+  ACTIVELY_LOOKING
+  OPEN_TO_OFFERS
+  NOT_LOOKING
+}
+
+enum AlertFrequency {
+  IMMEDIATE
+  DAILY_DIGEST
+  WEEKLY_DIGEST
+}
+
 // ─── User (single auth table for all roles) ──
 
 model User {
@@ -74,6 +86,7 @@ model User {
   savedJobs      SavedJob[]
   resumes        Resume[]
   jobPostings    JobPosting[]    // jobs this user posted
+  jobAlerts      JobAlert[]
 
   @@map("users")
 }
@@ -81,26 +94,66 @@ model User {
 // ─── Teacher Profile ─────────────────────────
 
 model TeacherProfile {
-  id              String   @id @default(uuid()) @db.Uuid
-  userId          String   @unique @map("user_id") @db.Uuid
-  qualification   String?
-  experience      String?  // e.g. "3-5 years"
-  currentSchool   String?  @map("current_school")
-  city            String?
-  bio             String?  @db.Text
-  subjects        String[] // array of subjects they teach
-  preferredBoards String[] @map("preferred_boards") // boards they prefer
-  preferredGrades String[] @map("preferred_grades") // grade levels they prefer
-  expectedSalary  Int?     @map("expected_salary")  // monthly in INR
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id                 String              @id @default(uuid()) @db.Uuid
+  userId             String              @unique @map("user_id") @db.Uuid
+  qualification      String?
+  experience         String?             // e.g. "3-5 years"
+  currentSchool      String?             @map("current_school")
+  city               String?
+  bio                String?             @db.Text
+  subjects           String[]            // array of subjects they teach
+  preferredBoards    String[]            @map("preferred_boards") // boards they prefer
+  preferredGrades    String[]            @map("preferred_grades") // grade levels they prefer
+  expectedSalary     Int?                @map("expected_salary")  // monthly in INR
+  availabilityStatus AvailabilityStatus  @default(NOT_LOOKING) @map("availability_status")
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  experiences      Experience[]
+  certifications   Certification[]
 
   @@index([city])
   @@index([subjects])
   @@map("teacher_profiles")
+}
+
+// ─── Experience (work history) ───────────────
+
+model Experience {
+  id               String         @id @default(uuid()) @db.Uuid
+  teacherProfileId String         @map("teacher_profile_id") @db.Uuid
+  teacherProfile   TeacherProfile @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
+  schoolName       String         @map("school_name")
+  role             String
+  startDate        DateTime       @map("start_date") @db.Timestamptz
+  endDate          DateTime?      @map("end_date") @db.Timestamptz
+  isCurrent        Boolean        @default(false) @map("is_current")
+  description      String?        @db.Text
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([teacherProfileId])
+  @@map("experiences")
+}
+
+// ─── Certification ───────────────────────────
+
+model Certification {
+  id               String         @id @default(uuid()) @db.Uuid
+  teacherProfileId String         @map("teacher_profile_id") @db.Uuid
+  teacherProfile   TeacherProfile @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
+  name             String
+  issuedBy         String         @map("issued_by")
+  issuedAt         DateTime       @map("issued_at") @db.Timestamptz
+  expiresAt        DateTime?      @map("expires_at") @db.Timestamptz
+  credentialId     String?        @map("credential_id")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([teacherProfileId])
+  @@map("certifications")
 }
 
 // ─── School Profile ──────────────────────────
@@ -232,12 +285,15 @@ model Application {
 // ─── Resume (file uploads) ───────────────────
 
 model Resume {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
-  fileUrl    String   @map("file_url")  // Supabase Storage URL
-  fileName   String   @map("file_name")
-  fileSize   Int      @map("file_size") // bytes
-  uploadedAt DateTime @default(now()) @map("uploaded_at") @db.Timestamptz
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  fileUrl       String   @map("file_url")  // Supabase Storage URL
+  fileName      String   @map("file_name")
+  fileSize      Int      @map("file_size") // bytes
+  isGenerated   Boolean  @default(false) @map("is_generated")
+  template      String?  // "ats-friendly", "modern", "minimal" for generated resumes
+  generatedData Json?    @map("generated_data") // metadata about what was used to generate
+  uploadedAt    DateTime @default(now()) @map("uploaded_at") @db.Timestamptz
 
   // Relations
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -262,4 +318,49 @@ model SavedJob {
   @@unique([userId, jobId]) // can't save the same job twice
   @@index([userId])
   @@map("saved_jobs")
+}
+
+// ─── Job Alert ───────────────────────────
+
+model JobAlert {
+  id             String          @id @default(uuid()) @db.Uuid
+  userId         String          @map("user_id") @db.Uuid
+  name           String          // e.g. "Math jobs in Bangalore"
+  subject        String?         // filter by subject
+  city           String?         // filter by city
+  board          Board?          // CBSE, ICSE, etc
+  gradeLevel     String?         @map("grade_level") // e.g. "9-12"
+  jobType        JobType?        @map("job_type")
+  salaryMin      Int?            @map("salary_min")
+  salaryMax      Int?            @map("salary_max")
+  frequency      AlertFrequency  @default(DAILY_DIGEST)
+  isActive       Boolean         @default(true) @map("is_active")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alertHistory   AlertHistory[]
+
+  @@index([userId])
+  @@index([isActive])
+  @@map("job_alerts")
+}
+
+// ─── Alert History ───────────────────────
+
+model AlertHistory {
+  id             String          @id @default(uuid()) @db.Uuid
+  alertId        String          @map("alert_id") @db.Uuid
+  jobIds         String[]        @map("job_ids") @db.Uuid // jobs sent in this digest
+  sentAt         DateTime        @default(now()) @map("sent_at") @db.Timestamptz
+  openedAt       DateTime?       @map("opened_at")
+  clickedAt      DateTime?       @map("clicked_at")
+
+  // Relations
+  alert          JobAlert        @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId])
+  @@index([sentAt(sort: Desc)])
+  @@map("alert_history")
 }

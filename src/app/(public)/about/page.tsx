@@ -12,12 +12,17 @@ export const metadata: Metadata = {
 };
 
 async function getStats() {
-  const [jobCount, schoolCount, teacherCount] = await Promise.all([
-    prisma.jobPosting.count({ where: { status: "ACTIVE" } }),
-    prisma.schoolProfile.count(),
-    prisma.user.count({ where: { role: "TEACHER" } }),
-  ]);
-  return { jobCount, schoolCount, teacherCount };
+  try {
+    const [jobCount, schoolCount, teacherCount] = await Promise.all([
+      prisma.jobPosting.count({ where: { status: "ACTIVE" } }),
+      prisma.schoolProfile.count(),
+      prisma.user.count({ where: { role: "TEACHER" } }),
+    ]);
+    return { jobCount, schoolCount, teacherCount };
+  } catch (error) {
+    console.error("Failed to load about page stats:", error);
+    return { jobCount: 0, schoolCount: 0, teacherCount: 0 };
+  }
 }
 
 export default async function AboutPage() {

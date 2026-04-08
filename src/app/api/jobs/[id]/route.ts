@@ -125,7 +125,7 @@ export async function PUT(
 
     const { requirements, benefits, ...jobData } = parsed.data;
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx: any) => {
       const updatedJob = await tx.jobPosting.update({
         where: { id },
         data: jobData,

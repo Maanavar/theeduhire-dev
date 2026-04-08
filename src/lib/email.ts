@@ -223,6 +223,56 @@ export async function sendContactNotification({
   });
 }
 
+// ── 6. Job Alert Digest (to Teacher) ────────────────────────────────────────
+
+export async function sendJobAlertDigest({
+  teacherEmail,
+  alertName,
+  jobs,
+  frequency,
+}: {
+  teacherEmail: string;
+  alertName: string;
+  jobs: Array<{ id: string; title: string; subject: string; schoolName: string; city: string; salaryMin?: number; salaryMax?: number; description: string }>;
+  frequency: string;
+}) {
+  const manageAlertsUrl = `${BASE_URL}/dashboard/alerts`;
+
+  const jobCards = jobs
+    .map(
+      (job) => `
+    <div style="border:1px solid #e8e7e0;border-radius:10px;padding:16px;margin-bottom:12px">
+      <h3 style="margin:0 0 8px 0;font-size:16px;font-weight:600;color:#2a7a4e">${job.title}</h3>
+      <div style="font-size:14px;color:#555;margin-bottom:8px"><strong>${job.schoolName}</strong> • ${job.city}</div>
+      <div style="font-size:13px;color:#888780;margin-bottom:12px">
+        ${job.subject}${job.salaryMin ? ` • ₹${job.salaryMin}-${job.salaryMax || job.salaryMin}` : ""}
+      </div>
+      <p style="font-size:13px;color:#444441;margin:8px 0">${job.description.substring(0, 150)}...</p>
+      <a href="${BASE_URL}/jobs/${job.id}" style="color:#2a7a4e;font-weight:600;text-decoration:none;font-size:13px">View Details →</a>
+    </div>
+  `
+    )
+    .join("");
+
+  const html = emailWrapper(`
+    <h1>${jobs.length} new job${jobs.length !== 1 ? "s" : ""} for you</h1>
+    <p>Hi,</p>
+    <p>We found <strong>${jobs.length} new job${jobs.length !== 1 ? "s" : ""}</strong> matching your alert: <strong>${alertName}</strong></p>
+    <div style="margin:24px 0">${jobCards}</div>
+    <p style="font-size:13px;color:#888780">
+      You're receiving this email because you have a ${frequency.toLowerCase()} alert for "${alertName}".
+      <a href="${manageAlertsUrl}" style="color:#2a7a4e;text-decoration:none">Manage your alerts</a>
+    </p>
+  `);
+
+  return resend.emails.send({
+    from: FROM,
+    to: teacherEmail,
+    subject: `${jobs.length} new ${alertName} job${jobs.length !== 1 ? "s" : ""} posted`,
+    html,
+  });
+}
+
 // ── Generic fallback ─────────────────────────────────────────────────────────
 
 export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {

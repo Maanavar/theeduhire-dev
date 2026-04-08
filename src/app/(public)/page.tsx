@@ -7,11 +7,16 @@ import {
 
 const getStats = unstable_cache(
   async () => {
-    const [jobCount, schoolCount] = await Promise.all([
-      prisma.jobPosting.count({ where: { status: "ACTIVE" } }),
-      prisma.schoolProfile.count(),
-    ]);
-    return { jobCount, schoolCount };
+    try {
+      const [jobCount, schoolCount] = await Promise.all([
+        prisma.jobPosting.count({ where: { status: "ACTIVE" } }),
+        prisma.schoolProfile.count(),
+      ]);
+      return { jobCount, schoolCount };
+    } catch (error) {
+      console.error("Failed to load homepage stats:", error);
+      return { jobCount: 0, schoolCount: 0 };
+    }
   },
   ["homepage-stats"],
   { revalidate: 3600 }
