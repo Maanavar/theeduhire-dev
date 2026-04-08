@@ -58,7 +58,8 @@ export default function JobDetailPanel({ jobId }: Props) {
     return () => { cancelled = true; };
   }, [jobId]);
 
-  useEffect(() => { return fetchJob(); }, [fetchJob]);
+  useEffect(() => { return fetchJob(); }, [fetchJob, session?.user?.id]);
+
 
   const handleSave = async () => {
     if (!session?.user) { toast.error("Sign in to save jobs"); return; }

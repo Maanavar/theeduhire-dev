@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatSalary, timeAgo } from "@/lib/utils";
 import { MapPin, Clock, Briefcase, ArrowRight, RefreshCw } from "lucide-react";
 import StatsCards from "@/components/dashboard/stats-cards";
+import JobDetailModal from "@/components/jobs/job-detail-modal";
 
 interface AppItem {
   id: string;
@@ -64,6 +65,8 @@ export default function ApplicationsPage() {
   const [apps, setApps] = useState<AppItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJobTitle, setSelectedJobTitle] = useState<string>("");
 
   const fetchApps = () => {
     setLoading(true);
@@ -91,6 +94,16 @@ export default function ApplicationsPage() {
           Track the status of your job applications
         </p>
       </div>
+
+      <JobDetailModal
+        open={!!selectedJobId}
+        jobId={selectedJobId}
+        jobTitle={selectedJobTitle}
+        onClose={() => {
+          setSelectedJobId(null);
+          setSelectedJobTitle("");
+        }}
+      />
 
       <StatsCards />
 
@@ -143,12 +156,15 @@ export default function ApplicationsPage() {
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2.5 mb-1 flex-wrap">
-                    <Link
-                      href={`/jobs/${app.job.id}`}
-                      className="text-[15px] font-semibold text-gray-900 hover:text-brand-600 transition-colors truncate"
+                    <button
+                      onClick={() => {
+                        setSelectedJobId(app.job.id);
+                        setSelectedJobTitle(app.job.title);
+                      }}
+                      className="text-[15px] font-semibold text-gray-900 hover:text-brand-600 transition-colors truncate text-left"
                     >
                       {app.job.title}
-                    </Link>
+                    </button>
                     {app.job.status === "CLOSED" && (
                       <span className="text-[10px] font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
                         Job Closed
@@ -176,12 +192,15 @@ export default function ApplicationsPage() {
                   <span className="flex items-center gap-1 text-[11px] text-gray-400 font-medium">
                     <Clock size={11} /> Applied {timeAgo(app.appliedAt)}
                   </span>
-                  <Link
-                    href={`/jobs/${app.job.id}`}
+                  <button
+                    onClick={() => {
+                      setSelectedJobId(app.job.id);
+                      setSelectedJobTitle(app.job.title);
+                    }}
                     className="text-[11px] text-brand-500 hover:text-brand-700 font-semibold transition-colors flex items-center gap-1"
                   >
                     View job <ArrowRight size={10} />
-                  </Link>
+                  </button>
                 </div>
               </div>
             </div>

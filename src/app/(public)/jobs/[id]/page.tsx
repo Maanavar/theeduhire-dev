@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatSalary, timeAgo } from "@/lib/utils";
+import { getSession } from "@/lib/session";
 import Link from "next/link";
 import {
   ArrowLeft, MapPin, BookOpen, Users, Briefcase,
@@ -33,6 +34,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function JobDetailPage({ params }: Props) {
   const { id } = await params;
+  const session = await getSession();
+  const isTeacher = session?.user?.role === "TEACHER";
+  const isSchoolAdmin = session?.user?.role === "SCHOOL_ADMIN";
 
   const job = await prisma.jobPosting.findUnique({
     where: { id },
@@ -133,12 +137,21 @@ export default async function JobDetailPage({ params }: Props) {
 
       {/* Actions */}
       <div className="flex gap-3 flex-wrap">
-        <button className="flex items-center gap-2 px-7 py-3.5 rounded-xl text-[15px] font-semibold bg-brand-500 text-white hover:bg-brand-600 transition-colors">
-          Apply for this position <ArrowRight size={16} />
-        </button>
-        <button className="flex items-center gap-2 px-6 py-3.5 rounded-xl text-[15px] font-medium border border-gray-200 text-gray-600 hover:border-brand-500 hover:text-brand-500 transition-colors">
-          <Bookmark size={16} /> Save job
-        </button>
+        {isSchoolAdmin ? (
+          <div className="rounded-2xl border border-amber-100 bg-amber-50 px-6 py-4 text-sm text-amber-700 max-w-[420px]">
+            School admins cannot apply for teaching positions here. Manage or post jobs instead from your dashboard.
+          </div>
+        ) : (
+          <>
+            <button className="flex items-center gap-2 px-7 py-3.5 rounded-xl text-[15px] font-semibold bg-brand-500 text-white hover:bg-brand-600 transition-colors">
+              Apply for this position <ArrowRight size={16} />
+            </button>
+            <button className="flex items-center gap-2 px-6 py-3.5 rounded-xl text-[15px] font-medium border border-gray-200 text-gray-600 hover:border-brand-500 hover:text-brand-500 transition-colors">
+              <Bookmark size={16} /> Save job
+            </button>
+          </>
+        )}
+
         <Link
           href="/jobs"
           className="flex items-center gap-2 px-6 py-3.5 rounded-xl text-[15px] font-medium border border-gray-200 text-gray-600 hover:border-gray-300 transition-colors"

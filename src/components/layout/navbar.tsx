@@ -49,6 +49,15 @@ export default function Navbar() {
   const dashboardHref = isSchool ? "/dashboard/my-jobs" : "/dashboard/applications";
   const showPostCta = isSchool || !isAuthed;
 
+  // Dynamic nav links based on auth status
+  const navLinks = NAV_LINKS.map(link => {
+    if (link.href === "/" && isAuthed) {
+      return { ...link, href: dashboardHref };
+    }
+    return link;
+  });
+
+  const homeHref = isAuthed ? dashboardHref : "/";
   const initials = session?.user?.name?.charAt(0).toUpperCase() || "U";
 
   return (
@@ -63,7 +72,7 @@ export default function Navbar() {
         <div className="max-w-[1280px] mx-auto flex items-center justify-between h-full">
 
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
+          <Link href={homeHref} className="flex items-center gap-2 group">
             <div className="w-7 h-7 bg-brand-gradient rounded-lg flex items-center justify-center shadow-brand">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1.5C4 1.5 2 3.5 2 6.5c0 2 1 3.5 2.5 4.5L7 12.5l2.5-1.5C11 9.5 12 8 12 6c0-3-2-4.5-5-4.5z" fill="white" fillOpacity=".9"/>
@@ -79,7 +88,7 @@ export default function Navbar() {
 
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-0.5">
-            {NAV_LINKS.map((link) => {
+            {navLinks.map((link) => {
               const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
               return (
                 <Link
@@ -269,7 +278,7 @@ export default function Navbar() {
                 </div>
               )}
 
-              {NAV_LINKS.map((link) => {
+              {navLinks.map((link) => {
                 const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
                 return (
                   <Link key={link.href} href={link.href} onClick={() => setMenuOpen(false)}

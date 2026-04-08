@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatSalary, timeAgo } from "@/lib/utils";
-import { MapPin, Bookmark, BookmarkX, ExternalLink } from "lucide-react";
+import { MapPin, Bookmark, BookmarkX, ExternalLink, CheckCircle2 } from "lucide-react";
+import JobDetailModal from "@/components/jobs/job-detail-modal";
 
 interface SavedItem {
   id: string;
@@ -19,6 +20,7 @@ interface SavedItem {
     postedAt: string;
     status: string;
     school: { schoolName: string; city: string; verified: boolean };
+    isApplied?: boolean;
   };
 }
 
@@ -26,13 +28,30 @@ export default function SavedJobsPage() {
   const [saved, setSaved] = useState<SavedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJobTitle, setSelectedJobTitle] = useState<string>("");
 
   useEffect(() => {
     fetch("/api/saved-jobs")
       .then((r) => r.json())
       .then((data) => {
-        if (data.success) setSaved(data.data);
-        else setError(data.error || "Failed to load saved jobs");
+        if (data.success) {
+          // Fetch application status for each job
+          Promise.all(
+            data.data.map(async (item: SavedItem) => {
+              try {
+                const res = await fetch(`/api/jobs/${item.job.id}`);
+                const jobData = await res.json();
+                if (jobData.success) {
+                  return { ...item, job: { ...item.job, isApplied: jobData.data.isApplied } };
+                }
+              } catch {}
+              return item;
+            })
+          ).then(setSaved);
+        } else {
+          setError(data.error || "Failed to load saved jobs");
+        }
       })
       .catch(() => setError("Network error. Please check your connection."))
       .finally(() => setLoading(false));
@@ -54,6 +73,16 @@ export default function SavedJobsPage() {
     <div>
       <h1 className="font-display text-[26px] font-bold mb-1">Saved Jobs</h1>
       <p className="text-[14px] text-gray-500 mb-6">Jobs you&apos;ve bookmarked for later</p>
+
+      <JobDetailModal
+        open={!!selectedJobId}
+        jobId={selectedJobId}
+        jobTitle={selectedJobTitle}
+        onClose={() => {
+          setSelectedJobId(null);
+          setSelectedJobTitle("");
+        }}
+      />
 
       {loading ? (
         <div className="space-y-3">
@@ -79,9 +108,15 @@ export default function SavedJobsPage() {
             <div key={item.id} className="bg-white border border-gray-100 rounded-2xl p-5 hover:border-gray-200 transition-colors">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <Link href={`/jobs/${item.job.id}`} className="text-[15px] font-semibold hover:text-brand-500 transition-colors truncate block">
+                  <button
+                    onClick={() => {
+                      setSelectedJobId(item.job.id);
+                      setSelectedJobTitle(item.job.title);
+                    }}
+                    className="text-[15px] font-semibold hover:text-brand-500 transition-colors truncate block text-left"
+                  >
                     {item.job.title}
-                  </Link>
+                  </button>
                   <p className="text-[13px] text-gray-500">{item.job.school.schoolName}</p>
                   <div className="flex gap-3 mt-2 text-[12.5px] text-gray-400">
                     <span className="flex items-center gap-1"><MapPin size={12} />{item.job.school.city}</span>
@@ -92,12 +127,21 @@ export default function SavedJobsPage() {
                 </div>
 
                 <div className="flex gap-2 shrink-0">
-                  <Link
-                    href={`/jobs/${item.job.id}`}
-                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-[12.5px] font-medium bg-brand-500 text-white hover:bg-brand-600 transition-colors"
-                  >
-                    Apply <ExternalLink size={11} />
-                  </Link>
+                  {item.job.isApplied ? (
+                    <div className="flex items-center gap-1 px-3 py-2 rounded-lg text-[12.5px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">
+                      <CheckCircle2 size={13} /> Applied
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setSelectedJobId(item.job.id);
+                        setSelectedJobTitle(item.job.title);
+                      }}
+                      className="flex items-center gap-1 px-3 py-2 rounded-lg text-[12.5px] font-medium bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+                    >
+                      Apply <ExternalLink size={11} />
+                    </button>
+                  )}
                   <button
                     onClick={() => unsave(item.job.id)}
                     className="flex items-center gap-1 px-3 py-2 rounded-lg text-[12.5px] font-medium border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 transition-colors"

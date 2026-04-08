@@ -29,7 +29,12 @@ export default withAuth(
 
     // Redirect authenticated users away from auth pages
     if (path.startsWith("/auth/") && token) {
-      return NextResponse.redirect(new URL("/jobs", req.url));
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+
+    // Redirect authenticated users from home to dashboard
+    if (path === "/" && token) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
     return NextResponse.next();

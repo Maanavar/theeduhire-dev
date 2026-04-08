@@ -1,4 +1,5 @@
 import Navbar from "@/components/layout/navbar";
+import Footer from "@/components/layout/footer";
 import DashboardSidebar from "@/components/layout/dashboard-sidebar";
 
 export default function DashboardLayout({
@@ -7,9 +8,9 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <>
+    <div className="flex flex-col min-h-screen">
       <Navbar />
-      <div className="min-h-[calc(100vh-58px)]" style={{ background: "var(--surface-base)" }}>
+      <div className="flex-1" style={{ background: "var(--surface-base)" }}>
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex gap-7 py-6 lg:py-8">
             {/* Sidebar */}
@@ -28,6 +29,7 @@ export default function DashboardLayout({
           </div>
         </div>
       </div>
-    </>
+      <Footer />
+    </div>
   );
 }
