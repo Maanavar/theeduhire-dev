@@ -23,14 +23,15 @@ export async function POST(req: NextRequest) {
 
     // Find active alerts that should be sent today
     const isMonday = dayOfWeek === 1;
+    const orConditions: any[] = [{ frequency: "DAILY_DIGEST" }];
+    if (isMonday) {
+      orConditions.push({ frequency: "WEEKLY_DIGEST" });
+    }
+
     const alerts = await prisma.jobAlert.findMany({
       where: {
         isActive: true,
-        OR: [
-          { frequency: "DAILY_DIGEST" },
-          // Send weekly digest on Mondays only
-          ...(isMonday ? [{ frequency: "WEEKLY_DIGEST" }] : []),
-        ],
+        OR: orConditions,
       },
       include: {
         user: {

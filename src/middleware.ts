@@ -15,7 +15,7 @@ export default withAuth(
       }
 
       // School-only routes
-      const schoolRoutes = ["/dashboard/post-job", "/dashboard/my-jobs"];
+      const schoolRoutes = ["/dashboard/school", "/dashboard/post-job", "/dashboard/my-jobs"];
       if (schoolRoutes.some((r) => path.startsWith(r)) && token.role !== "SCHOOL_ADMIN" && token.role !== "ADMIN") {
         return NextResponse.redirect(new URL("/dashboard/applications", req.url));
       }
