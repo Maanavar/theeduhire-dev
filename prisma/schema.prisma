@@ -65,6 +65,16 @@ enum AlertFrequency {
   WEEKLY_DIGEST
 }
 
+enum RejectionReason {
+  OVERQUALIFIED
+  UNDERQUALIFIED
+  POSITION_FILLED
+  EXPERIENCE_MISMATCH
+  LOCATION_MISMATCH
+  SALARY_MISMATCH
+  OTHER
+}
+
 // ─── User (single auth table for all roles) ──
 
 model User {
@@ -87,6 +97,7 @@ model User {
   resumes        Resume[]
   jobPostings    JobPosting[]    // jobs this user posted
   jobAlerts      JobAlert[]
+  statusChanges  ApplicationStatusHistory[]
 
   @@map("users")
 }
@@ -200,6 +211,7 @@ model JobPosting {
   status      JobStatus @default(ACTIVE)
   postedAt    DateTime  @default(now()) @map("posted_at") @db.Timestamptz
   expiresAt   DateTime? @map("expires_at") @db.Timestamptz
+  views       Int       @default(0)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -260,18 +272,20 @@ model Application {
   jobId       String            @map("job_id") @db.Uuid
   applicantId String            @map("applicant_id") @db.Uuid
   coverLetter String?           @map("cover_letter") @db.Text
-  resumeId    String?           @map("resume_id") @db.Uuid
-  status      ApplicationStatus @default(PENDING)
-  schoolNotes String?           @map("school_notes") @db.Text // internal notes
-  appliedAt   DateTime          @default(now()) @map("applied_at") @db.Timestamptz
-  reviewedAt  DateTime?         @map("reviewed_at") @db.Timestamptz
-  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+  resumeId         String?              @map("resume_id") @db.Uuid
+  status           ApplicationStatus    @default(PENDING)
+  schoolNotes      String?              @map("school_notes") @db.Text // internal notes
+  rejectionReason  RejectionReason?     @map("rejection_reason")
+  appliedAt        DateTime             @default(now()) @map("applied_at") @db.Timestamptz
+  reviewedAt       DateTime?            @map("reviewed_at") @db.Timestamptz
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  job       JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  applicant User       @relation(fields: [applicantId], references: [id], onDelete: Cascade)
-  resume    Resume?    @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  job            JobPosting              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applicant      User                    @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  resume         Resume?                 @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  statusHistory  ApplicationStatusHistory[]
 
   // Prevent duplicate applications
   @@unique([jobId, applicantId])
@@ -363,4 +377,25 @@ model AlertHistory {
   @@index([alertId])
   @@index([sentAt(sort: Desc)])
   @@map("alert_history")
+}
+
+// ─── Application Status History (audit trail) ─
+
+model ApplicationStatusHistory {
+  id              String            @id @default(uuid()) @db.Uuid
+  applicationId   String            @map("application_id") @db.Uuid
+  fromStatus      ApplicationStatus @map("from_status")
+  toStatus        ApplicationStatus @map("to_status")
+  changedBy       String            @map("changed_by") @db.Uuid
+  changedAt       DateTime          @default(now()) @map("changed_at") @db.Timestamptz
+  note            String?           @db.Text
+  rejectionReason RejectionReason?  @map("rejection_reason")
+
+  // Relations
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  changedByUser User        @relation(fields: [changedBy], references: [id])
+
+  @@index([applicationId])
+  @@index([changedAt(sort: Desc)])
+  @@map("application_status_history")
 }

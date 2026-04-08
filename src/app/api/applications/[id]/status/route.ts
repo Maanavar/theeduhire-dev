@@ -45,14 +45,28 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
     }
 
-    const updated = await prisma.application.update({
-      where: { id },
-      data: {
-        status: parsed.data.status,
-        schoolNotes: parsed.data.schoolNotes ?? application.schoolNotes,
-        reviewedAt: application.reviewedAt ?? new Date(),
-      },
-    });
+    // Atomic transaction: update application + create status history
+    const [updated] = await prisma.$transaction([
+      prisma.application.update({
+        where: { id },
+        data: {
+          status: parsed.data.status,
+          schoolNotes: parsed.data.schoolNotes ?? application.schoolNotes,
+          rejectionReason: parsed.data.rejectionReason ?? undefined,
+          reviewedAt: application.reviewedAt ?? new Date(),
+        },
+      }),
+      prisma.applicationStatusHistory.create({
+        data: {
+          applicationId: id,
+          fromStatus: application.status,
+          toStatus: parsed.data.status,
+          changedBy: auth.user.id,
+          note: parsed.data.note,
+          rejectionReason: parsed.data.rejectionReason ?? undefined,
+        },
+      }),
+    ]);
 
     // Send status update email non-blocking
     sendStatusUpdate({

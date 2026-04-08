@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatSalary, timeAgo, getBoardLabel } from "@/lib/utils";
 import { Plus, Users, Eye, Loader2, Briefcase, ArrowRight } from "lucide-react";
 import StatsCards from "@/components/dashboard/stats-cards";
+import JobDetailModal from "@/components/jobs/job-detail-modal";
 import { toast } from "@/components/ui/toast";
 
 interface MyJob {
@@ -61,6 +62,8 @@ export default function MyJobsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJobTitle, setSelectedJobTitle] = useState<string>("");
 
   useEffect(() => {
     fetch("/api/my-jobs")
@@ -98,6 +101,16 @@ export default function MyJobsPage() {
 
   return (
     <div>
+      <JobDetailModal
+        open={!!selectedJobId}
+        jobId={selectedJobId}
+        jobTitle={selectedJobTitle}
+        onClose={() => {
+          setSelectedJobId(null);
+          setSelectedJobTitle("");
+        }}
+      />
+
       {/* Page header */}
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
@@ -203,12 +216,15 @@ export default function MyJobsPage() {
                     {job._count.applications} Applicant{job._count.applications !== 1 ? "s" : ""}
                   </Link>
 
-                  <Link
-                    href={`/jobs/${job.id}`}
+                  <button
+                    onClick={() => {
+                      setSelectedJobId(job.id);
+                      setSelectedJobTitle(job.title);
+                    }}
                     className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border border-black/[0.08] text-gray-600 bg-white hover:bg-gray-50 hover:border-black/[0.13] transition-all duration-[120ms]"
                   >
                     <Eye size={13} /> View
-                  </Link>
+                  </button>
                 </div>
               </div>
             </div>
