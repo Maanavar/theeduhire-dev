@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 import { createJobSchema } from "@/lib/validators/job";
-import { Prisma, JobStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { sendJobAlertDigest } from "@/lib/email";
 
 const JOBS_PER_PAGE = 20;
 
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || String(JOBS_PER_PAGE))));
 
-    const where: Prisma.JobPostingWhereInput = { status: JobStatus.ACTIVE };
+    const where: Prisma.JobPostingWhereInput = { status: "ACTIVE" as any };
 
     if (search) {
       where.OR = [
@@ -81,13 +82,13 @@ export async function POST(req: NextRequest) {
 
     const { requirements, benefits, ...jobData } = parsed.data;
 
-    const job = await prisma.$transaction(async (tx) => {
+    const job = await prisma.$transaction(async (tx: any) => {
       const created = await tx.jobPosting.create({
         data: {
           ...jobData,
           schoolId: school.id,
           postedBy: auth.user.id,
-          status: JobStatus.ACTIVE,
+          status: "ACTIVE" as any,
         },
       });
 
@@ -104,6 +105,57 @@ export async function POST(req: NextRequest) {
 
       return created;
     });
+
+    // Trigger immediate alerts in background (non-blocking)
+    (async () => {
+      try {
+        // Find all IMMEDIATE alerts
+        const immediateAlerts = await prisma.jobAlert.findMany({
+          where: { frequency: "IMMEDIATE", isActive: true },
+          include: { user: true },
+        });
+
+        for (const alert of immediateAlerts) {
+          // Check if job matches all alert criteria
+          if (alert.subject && alert.subject !== job.subject) continue;
+          if (alert.city && alert.city !== school.city) continue;
+          if (alert.board && alert.board !== job.board) continue;
+          if (alert.gradeLevel && alert.gradeLevel !== job.gradeLevel) continue;
+          if (alert.jobType && alert.jobType !== job.jobType) continue;
+          if (alert.salaryMin && job.salaryMax && job.salaryMax < alert.salaryMin) continue;
+          if (alert.salaryMax && job.salaryMin && job.salaryMin > alert.salaryMax) continue;
+
+          // Send immediate alert email
+          await sendJobAlertDigest({
+            teacherEmail: alert.user.email,
+            alertName: alert.name,
+            jobs: [
+              {
+                id: job.id,
+                title: job.title,
+                subject: job.subject,
+                city: school.city,
+                schoolName: school.schoolName,
+                salaryMin: job.salaryMin || undefined,
+                salaryMax: job.salaryMax || undefined,
+                description: job.description,
+              },
+            ],
+            frequency: "IMMEDIATE",
+          });
+
+          // Log to AlertHistory
+          await prisma.alertHistory.create({
+            data: {
+              alertId: alert.id,
+              jobIds: [job.id],
+            },
+          });
+        }
+      } catch (error) {
+        console.error("Failed to trigger immediate alerts:", error);
+      }
+    })();
 
     return NextResponse.json({ success: true, data: { id: job.id } }, { status: 201 });
   } catch (error) {

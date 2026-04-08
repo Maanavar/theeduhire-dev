@@ -98,7 +98,7 @@ export default async function JobDetailPage({ params }: Props) {
           <>
             <h3 className="text-[15px] font-semibold mt-6 mb-3">Requirements</h3>
             <ul className="space-y-1.5">
-              {job.requirements.map((req) => (
+              {job.requirements.map((req: any) => (
                 <li
                   key={req.id}
                   className="text-[14px] text-gray-600 pl-4 relative before:content-[''] before:absolute before:left-0 before:top-[9px] before:w-[5px] before:h-[5px] before:bg-brand-500 before:rounded-full leading-relaxed"
@@ -114,7 +114,7 @@ export default async function JobDetailPage({ params }: Props) {
           <>
             <h3 className="text-[15px] font-semibold mt-6 mb-3">Benefits</h3>
             <div className="flex gap-2 flex-wrap">
-              {job.benefits.map((ben) => (
+              {job.benefits.map((ben: any) => (
                 <span key={ben.id} className="text-[12px] bg-brand-50 text-brand-600 px-3 py-1.5 rounded-lg font-medium">
                   {ben.text}
                 </span>

@@ -133,7 +133,7 @@ export default async function AdminOverviewPage() {
             <a href="/admin/jobs" className="text-[12px] text-brand-500 hover:underline">View all</a>
           </div>
           <div className="divide-y divide-gray-50">
-            {stats.recentJobsList.map((job) => (
+            {stats.recentJobsList.map((job: any) => (
               <div key={job.id} className="px-5 py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[13.5px] font-medium truncate">{job.title}</p>
@@ -159,7 +159,7 @@ export default async function AdminOverviewPage() {
             <a href="/admin/schools" className="text-[12px] text-brand-500 hover:underline">View schools</a>
           </div>
           <div className="divide-y divide-gray-50">
-            {stats.recentUsersList.map((user) => (
+            {stats.recentUsersList.map((user: any) => (
               <div key={user.id} className="px-5 py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[13.5px] font-medium truncate">{user.name}</p>

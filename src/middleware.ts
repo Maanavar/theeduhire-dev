@@ -21,7 +21,7 @@ export default withAuth(
       }
 
       // Teacher-only routes
-      const teacherRoutes = ["/dashboard/applications", "/dashboard/saved"];
+      const teacherRoutes = ["/dashboard/applications", "/dashboard/saved", "/dashboard/resumes", "/dashboard/alerts"];
       if (teacherRoutes.some((r) => path.startsWith(r)) && token.role !== "TEACHER" && token.role !== "ADMIN") {
         return NextResponse.redirect(new URL("/dashboard/my-jobs", req.url));
       }

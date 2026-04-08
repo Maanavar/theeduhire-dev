@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { FileText, Bookmark, User, PlusCircle, List, Users } from "lucide-react";
+import { FileText, Bookmark, User, PlusCircle, List, Users, Bell, File } from "lucide-react";
 
 const TEACHER_LINKS = [
   { href: "/dashboard/applications", label: "My Applications", icon: FileText },
   { href: "/dashboard/saved",        label: "Saved Jobs",       icon: Bookmark },
+  { href: "/dashboard/resumes",      label: "Resumes",          icon: File },
+  { href: "/dashboard/alerts",       label: "Job Alerts",       icon: Bell },
   { href: "/dashboard/profile",      label: "My Profile",       icon: User },
 ];
 

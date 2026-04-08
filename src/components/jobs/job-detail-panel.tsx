@@ -171,7 +171,7 @@ export default function JobDetailPanel({ jobId }: Props) {
                 Requirements
               </h3>
               <ul className="space-y-2">
-                {job.requirements.map((req) => (
+                {job.requirements.map((req: any) => (
                   <li key={req.id} className="flex items-start gap-2.5 text-[14px] text-gray-700 leading-relaxed">
                     <span className="w-1.5 h-1.5 rounded-full bg-brand-500 mt-2 flex-shrink-0" />
                     {req.text}
@@ -188,7 +188,7 @@ export default function JobDetailPanel({ jobId }: Props) {
                 Benefits
               </h3>
               <div className="flex gap-2 flex-wrap">
-                {job.benefits.map((ben) => (
+                {job.benefits.map((ben: any) => (
                   <span key={ben.id} className="text-xs bg-brand-50 text-brand-700 px-3 py-1.5 rounded-lg font-medium border border-brand-100">
                     {ben.text}
                   </span>

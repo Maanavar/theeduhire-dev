@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { JobStatus } from "@prisma/client";
+// import { JobStatus } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(["ADMIN"]);
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const limit = 25;
-    const status = searchParams.get("status") as JobStatus | null;
+    const status = searchParams.get("status") as any | null;
     const search = searchParams.get("search") || "";
 
     const where: any = {};

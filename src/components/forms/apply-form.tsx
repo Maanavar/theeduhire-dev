@@ -1,12 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Loader2, ArrowRight, LogIn } from "lucide-react";
+import { Loader2, ArrowRight, LogIn, X, FileText } from "lucide-react";
 import Modal from "@/components/ui/modal";
 import FileUpload from "@/components/ui/file-upload";
 import { toast } from "@/components/ui/toast";
+
+interface Resume {
+  id: string;
+  fileName: string;
+  isGenerated: boolean;
+  template?: string;
+}
 
 interface Props {
   jobId: string;
@@ -25,6 +32,35 @@ export default function ApplyForm({ jobId, jobTitle, schoolName, open, onClose, 
   const [resumeId, setResumeId] = useState<string | undefined>();
   const [resumeName, setResumeName] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
+  const [existingResumes, setExistingResumes] = useState<Resume[]>([]);
+  const [loadingResumes, setLoadingResumes] = useState(false);
+  const [showResumeSelector, setShowResumeSelector] = useState(false);
+
+  // Fetch existing resumes when modal opens
+  useEffect(() => {
+    if (open && session?.user) {
+      setLoadingResumes(true);
+      fetch("/api/profile")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.data.resumes) {
+            setExistingResumes(data.data.resumes);
+            // Auto-select the most recent resume
+            if (data.data.resumes.length > 0 && !resumeId) {
+              const latestResume = data.data.resumes[0];
+              setResumeId(latestResume.id);
+              setResumeName(latestResume.fileName);
+            }
+          }
+        })
+        .catch(() => {
+          toast.error("Failed to load your resumes");
+        })
+        .finally(() => {
+          setLoadingResumes(false);
+        });
+    }
+  }, [open, session]);
 
   const handleUpload = (id: string, name: string) => {
     setResumeId(id);
@@ -126,16 +162,85 @@ export default function ApplyForm({ jobId, jobTitle, schoolName, open, onClose, 
             <p className="text-[11px] text-gray-400 mt-1">{coverLetter.length} characters</p>
           </div>
 
-          {/* Resume upload */}
+          {/* Resume selection */}
           <div>
             <label className={labelClass}>
               Resume <span className="text-gray-400 font-normal">(optional)</span>
             </label>
-            <FileUpload
-              onUpload={handleUpload}
-              onClear={handleClearResume}
-              uploadedName={resumeName}
-            />
+
+            {/* Selected Resume or Upload */}
+            {resumeName ? (
+              <div className="mb-3">
+                <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+                  <FileText size={16} className="text-blue-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] text-blue-700 font-medium truncate">{resumeName}</p>
+                    <p className="text-[11px] text-blue-500">Selected for application</p>
+                  </div>
+                  <button
+                    onClick={handleClearResume}
+                    className="text-blue-500 hover:text-blue-700 transition-colors"
+                    title="Remove resume"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+
+                {/* Change resume option */}
+                {existingResumes.length > 1 && (
+                  <button
+                    onClick={() => setShowResumeSelector(!showResumeSelector)}
+                    className="mt-2 text-[12.5px] text-brand-500 hover:text-brand-600 font-medium transition-colors"
+                  >
+                    {showResumeSelector ? "Hide other resumes" : "Choose a different resume"}
+                  </button>
+                )}
+              </div>
+            ) : null}
+
+            {/* Resume selector dropdown */}
+            {showResumeSelector && existingResumes.length > 1 && (
+              <div className="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                <p className="text-[12px] font-medium text-gray-600 mb-2">Your resumes:</p>
+                <div className="space-y-2 max-h-[180px] overflow-y-auto">
+                  {existingResumes.map((resume) => (
+                    <button
+                      key={resume.id}
+                      onClick={() => {
+                        setResumeId(resume.id);
+                        setResumeName(resume.fileName);
+                        setShowResumeSelector(false);
+                      }}
+                      className={`w-full flex items-start gap-2 p-2.5 rounded-lg text-left transition-colors ${
+                        resumeId === resume.id
+                          ? "bg-blue-100 border border-blue-300"
+                          : "hover:bg-white border border-transparent"
+                      }`}
+                    >
+                      <FileText size={14} className="text-gray-500 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12.5px] font-medium text-gray-800 truncate">{resume.fileName}</p>
+                        {resume.isGenerated && (
+                          <p className="text-[11px] text-gray-500">Generated {resume.template}</p>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upload new resume */}
+            <div>
+              <p className="text-[12px] font-medium text-gray-500 mb-2">
+                {resumeName ? "Or upload a different resume:" : "Upload a resume:"}
+              </p>
+              <FileUpload
+                onUpload={handleUpload}
+                onClear={handleClearResume}
+                uploadedName={undefined}
+              />
+            </div>
           </div>
 
           {/* Actions */}

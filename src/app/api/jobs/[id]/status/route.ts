@@ -5,10 +5,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 import { z } from "zod";
-import { JobStatus } from "@prisma/client";
+// import { JobStatus } from "@prisma/client";
 
 const schema = z.object({
-  status: z.nativeEnum(JobStatus),
+  status: z.enum(["DRAFT", "ACTIVE", "CLOSED", "EXPIRED"]),
 });
 
 export async function PATCH(
