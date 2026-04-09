@@ -70,6 +70,15 @@ export async function PUT(req: NextRequest) {
       }
 
       const { schoolName, city, board, address, website, about } = parsed.data;
+
+      // Update phone on User table if provided
+      if (body.phone !== undefined && body.phone !== "") {
+        await prisma.user.update({
+          where: { id: auth.user.id },
+          data: { phone: body.phone || null },
+        });
+      }
+
       const data = {
         ...(schoolName !== undefined && { schoolName }),
         ...(city !== undefined && { city }),

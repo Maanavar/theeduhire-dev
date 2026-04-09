@@ -42,6 +42,8 @@ enum ApplicationStatus {
   SHORTLISTED
   REJECTED
   HIRED
+  INTERVIEW_SCHEDULED
+  INTERVIEW_COMPLETED
 }
 
 enum Board {
@@ -75,6 +77,20 @@ enum RejectionReason {
   OTHER
 }
 
+enum InterviewType {
+  VIDEO
+  PHONE
+  IN_PERSON
+}
+
+enum InterviewStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
 // ─── User (single auth table for all roles) ──
 
 model User {
@@ -86,6 +102,8 @@ model User {
   avatarUrl      String?   @map("avatar_url")
   emailVerified  Boolean   @default(false) @map("email_verified")
   hashedPassword String?   @map("hashed_password") // null for OAuth users
+  resetToken     String?   @map("reset_token")
+  resetTokenExpiresAt DateTime? @map("reset_token_expires_at") @db.Timestamptz
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -98,6 +116,7 @@ model User {
   jobPostings    JobPosting[]    // jobs this user posted
   jobAlerts      JobAlert[]
   statusChanges  ApplicationStatusHistory[]
+  matchScores    AIMatchScore[]
 
   @@map("users")
 }
@@ -222,6 +241,7 @@ model JobPosting {
   benefits     JobBenefit[]
   applications Application[]
   savedBy      SavedJob[]
+  matchScores  AIMatchScore[]
 
   // Indexes for filtering & search
   @@index([status])
@@ -286,6 +306,7 @@ model Application {
   applicant      User                    @relation(fields: [applicantId], references: [id], onDelete: Cascade)
   resume         Resume?                 @relation(fields: [resumeId], references: [id], onDelete: SetNull)
   statusHistory  ApplicationStatusHistory[]
+  interview      Interview?
 
   // Prevent duplicate applications
   @@unique([jobId, applicantId])
@@ -398,4 +419,47 @@ model ApplicationStatusHistory {
   @@index([applicationId])
   @@index([changedAt(sort: Desc)])
   @@map("application_status_history")
+}
+
+// ─── Interview (Phase 4) ──────────────────────
+
+model Interview {
+  id            String          @id @default(uuid()) @db.Uuid
+  applicationId String          @unique @map("application_id") @db.Uuid
+  scheduledAt   DateTime        @map("scheduled_at") @db.Timestamptz
+  durationMins  Int             @default(30) @map("duration_mins")
+  type          InterviewType   @default(VIDEO)
+  meetingLink   String?         @map("meeting_link")
+  location      String?         // for IN_PERSON
+  status        InterviewStatus @default(PENDING)
+  schoolNotes   String?         @map("school_notes") @db.Text
+  teacherNotes  String?         @map("teacher_notes") @db.Text
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  application   Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledAt])
+  @@map("interviews")
+}
+
+// ─── AI Match Score (Phase 4) ─────────────────
+
+model AIMatchScore {
+  id          String   @id @default(uuid()) @db.Uuid
+  jobId       String   @map("job_id") @db.Uuid
+  applicantId String   @map("applicant_id") @db.Uuid
+  score       Float    // 0.0 - 1.0
+  breakdown   Json     // { subject, location, board, salary, experience } component scores
+  explanation String   // "Matches your Math + Science skills in Chennai"
+  computedAt  DateTime @default(now()) @map("computed_at") @db.Timestamptz
+
+  // Relations
+  job         JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applicant   User       @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, applicantId])
+  @@index([jobId, score(sort: Desc)])
+  @@map("ai_match_scores")
 }

@@ -13,6 +13,7 @@
     "db:seed": "tsx db-scripts/seed.ts",
     "db:seed:jobs": "tsx db-scripts/seed-jobs.ts",
     "db:seed:schools": "tsx db-scripts/seed-schools.ts",
+    "db:seed:phase4": "tsx scripts/seed-phase4.ts",
     "db:generate": "prisma generate"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^4.1.0",
+    "ics": "^3.11.0",
     "lucide-react": "^0.460.0",
     "next": "^15.1.0",
     "next-auth": "^4.24.0",

@@ -81,13 +81,16 @@ async function main() {
   for (const j of jobsData) {
     const school = schoolRecords[j.schoolIdx];
     const postedAt = new Date(Date.now() - j.daysAgo * 86400000);
+    // Set expiry to 30 days from now
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
 
     const job = await prisma.jobPosting.create({
       data: {
         schoolId: school.schoolId, postedBy: school.userId,
         title: j.title, subject: j.subject, board: school.board, gradeLevel: j.gradeLevel,
         jobType: j.jobType, experience: j.experience, salaryMin: j.salaryMin, salaryMax: j.salaryMax,
-        description: j.description, status: JobStatus.ACTIVE, postedAt,
+        description: j.description, status: JobStatus.ACTIVE, postedAt, expiresAt,
       },
     });
 
