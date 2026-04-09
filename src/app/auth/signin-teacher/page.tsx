@@ -185,6 +185,12 @@ function SignInForm() {
                 </>
               )}
             </button>
+
+            <div className="text-right">
+              <Link href="/auth/forgot-password" className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">
+                Forgot password?
+              </Link>
+            </div>
           </form>
 
           {/* Footer */}

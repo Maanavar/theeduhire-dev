@@ -11,6 +11,8 @@ import type {
   JobBenefit,
   ApplicationStatusHistory,
   ApplicationStatus,
+  Interview,
+  AIMatchScore,
 } from "@prisma/client";
 
 // Job with all relations loaded (for detail view)
@@ -89,4 +91,33 @@ export type SchoolAnalytics = {
     toStatus: ApplicationStatus;
     changedAt: string;
   }>;
+};
+
+// ─── Phase 4: Interview Scheduling + AI Matching ─
+
+// Interview with related application
+export type InterviewWithApplication = Interview & {
+  application: ApplicationWithJob;
+};
+
+// Match breakdown component scores
+export type MatchBreakdown = {
+  subject: number;
+  location: number;
+  board: number;
+  salary: number;
+  experience: number;
+};
+
+// Job recommendation for teacher
+export type JobRecommendation = JobListItem & {
+  matchScore: number; // 0-100
+  explanation: string;
+};
+
+// Ranked candidate for school (for applicants list)
+export type RankedCandidate = ApplicationWithTeacher & {
+  matchScore: number; // 0-100
+  explanation: string;
+  interview?: Interview | null;
 };

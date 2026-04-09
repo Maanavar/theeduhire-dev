@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Mail, Phone, GraduationCap, Clock, FileText, ShieldAlert, Loader2, Search, ChevronDown } from "lucide-react";
+import { ArrowLeft, Mail, Phone, GraduationCap, Clock, FileText, ShieldAlert, Loader2, Search, ChevronDown, Calendar } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { BulkActionToolbar } from "@/components/applications/bulk-action-toolbar";
 import { ApplicantHoverCard } from "@/components/applications/applicant-hover-card";
+import { ScheduleInterviewModal } from "@/components/interviews/schedule-interview-modal";
+import type { Interview } from "@prisma/client";
 
 interface Applicant {
   id: string;
@@ -15,6 +17,9 @@ interface Applicant {
   status: string;
   appliedAt: string;
   schoolNotes: string | null;
+  matchScore?: number; // 0-100
+  explanation?: string; // e.g., "Matches your Math skills in Chennai"
+  interview?: Interview | null;
   applicant: {
     id: string;
     name: string;
@@ -37,6 +42,13 @@ const statusColors: Record<string, string> = {
   SHORTLISTED: "bg-amber-50 text-amber-700",
   REJECTED: "bg-red-50 text-red-600",
   HIRED: "bg-green-50 text-green-700",
+};
+
+const getScoreColor = (score?: number): string => {
+  if (score === undefined) return "bg-gray-100 text-gray-600";
+  if (score >= 75) return "bg-green-50 text-green-700";
+  if (score >= 50) return "bg-amber-50 text-amber-700";
+  return "bg-gray-50 text-gray-600";
 };
 
 const REJECTION_REASONS = [
@@ -63,10 +75,12 @@ export default function ApplicantsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [showRejectionDropdown, setShowRejectionDropdown] = useState<string | null>(null);
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [selectedAppForInterview, setSelectedAppForInterview] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/jobs/${jobId}/applicants`),
+      fetch(`/api/jobs/${jobId}/candidates/ranked`),
       fetch(`/api/jobs/${jobId}`),
     ]).then(async ([appRes, jobRes]) => {
       if (appRes.status === 403 || appRes.status === 401) {
@@ -155,7 +169,7 @@ export default function ApplicantsPage() {
       }
 
       // Refresh applicants
-      const appRes = await fetch(`/api/jobs/${jobId}/applicants`);
+      const appRes = await fetch(`/api/jobs/${jobId}/candidates/ranked`);
       const appData = await appRes.json();
       if (appData.success) {
         setApplicants(appData.data);
@@ -182,6 +196,20 @@ export default function ApplicantsPage() {
       newSelected.add(id);
     }
     setSelectedIds(newSelected);
+  };
+
+  const handleInterviewScheduled = (interview: Interview) => {
+    // Refresh applicants to show updated interview status
+    Promise.all([
+      fetch(`/api/jobs/${jobId}/candidates/ranked`),
+    ]).then(async ([appRes]) => {
+      const appData = await appRes.json();
+      if (appData.success) {
+        setApplicants(appData.data);
+      }
+    });
+    setScheduleModalOpen(false);
+    setSelectedAppForInterview(null);
   };
 
   // Access denied state
@@ -299,6 +327,35 @@ export default function ApplicantsPage() {
                     isSelected ? "bg-brand-50 border-brand-200" : "hover:shadow-md hover:-translate-y-px"
                   }`}
                 >
+                  {/* Application Timeline */}
+                  {app.status !== "PENDING" && (
+                    <div className="flex items-center gap-2 text-[11px] font-medium text-gray-500 mb-3 -mx-6 -mt-6 px-6 pt-4 pb-0 border-b border-gray-100">
+                      <span className={app.status !== "PENDING" ? "text-gray-900 font-semibold" : ""}>Applied</span>
+                      <span className="text-gray-300">→</span>
+                      <span className={["REVIEWED", "SHORTLISTED", "HIRED"].includes(app.status) ? "text-gray-900 font-semibold" : "text-gray-400"}>
+                        Reviewed
+                      </span>
+                      <span className="text-gray-300">→</span>
+                      <span className={app.status === "SHORTLISTED" ? "text-brand-600 font-semibold" : app.status === "HIRED" ? "text-gray-900 font-semibold" : "text-gray-400"}>
+                        Shortlisted
+                      </span>
+                      {app.interview && (
+                        <>
+                          <span className="text-gray-300">→</span>
+                          <span className="text-emerald-600 font-semibold flex items-center gap-1">
+                            <Calendar size={10} /> Interview
+                          </span>
+                        </>
+                      )}
+                      {app.status === "HIRED" && !app.interview && (
+                        <>
+                          <span className="text-gray-300">→</span>
+                          <span className="text-green-600 font-semibold">Hired</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex items-start gap-3 mb-4">
                     {/* Checkbox */}
                     <input
@@ -322,9 +379,14 @@ export default function ApplicantsPage() {
                         <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${statusColors[app.status]}`}>
                           {app.status}
                         </span>
+                        {app.matchScore !== undefined && (
+                          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${getScoreColor(app.matchScore)}`}>
+                            {app.matchScore}% Match
+                          </span>
+                        )}
                       </div>
 
-                      <div className="flex gap-4 flex-wrap text-[13px] text-gray-500">
+                      <div className="flex gap-4 flex-wrap text-[13px] text-gray-500 mb-1">
                         <a href={`mailto:${app.applicant.email}`} className="flex items-center gap-1 hover:text-brand-600">
                           <Mail size={13} />
                           {app.applicant.email}
@@ -337,6 +399,9 @@ export default function ApplicantsPage() {
                         )}
                         {tp?.city && <span>📍 {tp.city}</span>}
                       </div>
+                      {app.explanation && (
+                        <p className="text-[12px] text-gray-600 italic">{app.explanation}</p>
+                      )}
                     </div>
 
                     {/* Applied time */}
@@ -358,6 +423,23 @@ export default function ApplicantsPage() {
                     {tp?.currentSchool && <span>Current: {tp.currentSchool}</span>}
                   </div>
 
+                  {/* Interview details (if scheduled) */}
+                  {app.interview && (
+                    <div className="bg-emerald-50 rounded-xl p-4 mb-4 border border-emerald-100">
+                      <h4 className="text-[12px] font-semibold text-emerald-900 flex items-center gap-1 mb-2">
+                        <Calendar size={12} /> Interview Scheduled
+                      </h4>
+                      <div className="space-y-1.5 text-[13px] text-emerald-700">
+                        <p><strong>Date:</strong> {new Date(app.interview.scheduledAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })}</p>
+                        <p><strong>Type:</strong> {app.interview.type === "VIDEO" ? "Video Call" : app.interview.type === "PHONE" ? "Phone Call" : "In Person"}</p>
+                        {app.interview.meetingLink && <p><strong>Link:</strong> <a href={app.interview.meetingLink} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline truncate">{app.interview.meetingLink}</a></p>}
+                        {app.interview.location && <p><strong>Location:</strong> {app.interview.location}</p>}
+                        <p><strong>Duration:</strong> {app.interview.durationMins} minutes</p>
+                        <p><strong>Status:</strong> <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700">{app.interview.status || "PENDING"}</span></p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Cover letter */}
                   {app.coverLetter && (
                     <div className="bg-gray-50 rounded-xl p-4 mb-4">
@@ -368,13 +450,33 @@ export default function ApplicantsPage() {
                     </div>
                   )}
 
-                  {/* Status controls */}
-                  <div className="flex items-center gap-2">
+                  {/* Status & Action controls */}
+                  <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-[12px] text-gray-400">Update status:</span>
                     {loadingId === app.id ? (
                       <Loader2 size={14} className="animate-spin text-gray-400" />
                     ) : (
                       <div className="flex gap-1.5 flex-wrap relative">
+                        {/* Schedule Interview button (only show for SHORTLISTED status) */}
+                        {app.status === "SHORTLISTED" && !app.interview && (
+                          <button
+                            onClick={() => {
+                              setSelectedAppForInterview(app.id);
+                              setScheduleModalOpen(true);
+                            }}
+                            className="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100 transition-colors flex items-center gap-1.5 duration-150"
+                          >
+                            <Calendar size={12} />
+                            Schedule Interview
+                          </button>
+                        )}
+                        {app.interview && (
+                          <span className="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
+                            <Calendar size={12} />
+                            Interview Scheduled
+                          </span>
+                        )}
+
                         {STATUS_OPTIONS.filter((s) => s !== app.status).map((s) => (
                           s === "REJECTED" ? (
                             <div key={s} className="relative">
@@ -441,6 +543,16 @@ export default function ApplicantsPage() {
         onClear={() => setSelectedIds(new Set())}
         loading={loadingId !== null}
       />
+
+      {/* Schedule Interview Modal */}
+      {selectedAppForInterview && (
+        <ScheduleInterviewModal
+          open={scheduleModalOpen}
+          onOpenChange={setScheduleModalOpen}
+          applicationId={selectedAppForInterview}
+          onSuccess={handleInterviewScheduled}
+        />
+      )}
     </div>
   );
 }

@@ -33,10 +33,10 @@ export default function Modal({
     };
     document.addEventListener("keydown", handleKey);
     document.body.style.overflow = "hidden";
-    // Focus trap — focus first focusable element
+    // Focus trap — focus first focusable element (skip close button)
     setTimeout(() => {
       const el = contentRef.current?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        'input, select, textarea, button:not([aria-label="Close"]), [href], [tabindex]:not([tabindex="-1"])'
       );
       el?.focus();
     }, 50);
@@ -44,7 +44,7 @@ export default function Modal({
       document.removeEventListener("keydown", handleKey);
       document.body.style.overflow = "";
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -92,7 +92,7 @@ export default function Modal({
         <div className="h-px bg-black/[0.05] flex-shrink-0" />
 
         {/* Body */}
-        <div className="px-6 py-5 overflow-y-auto scrollbar-thin flex-1">
+        <div className="px-6 py-5 overflow-y-auto scrollbar-thin flex-1" style={{ scrollbarGutter: "stable" }}>
           {children}
         </div>
 

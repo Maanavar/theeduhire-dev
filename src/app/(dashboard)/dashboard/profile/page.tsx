@@ -250,14 +250,33 @@ function ExperienceModal({
 }) {
   const form = useForm<ExperienceInput>({
     resolver: zodResolver(experienceSchema),
-    defaultValues: editingEntry ? {
-      ...editingEntry,
-      startDate: new Date(editingEntry.startDate).toISOString().split("T")[0],
-      endDate: editingEntry.endDate ? new Date(editingEntry.endDate).toISOString().split("T")[0] : "",
-    } : {
+    defaultValues: {
       isCurrent: false,
     },
   });
+
+  // Reset form when editingEntry changes
+  useEffect(() => {
+    if (editingEntry) {
+      form.reset({
+        schoolName: editingEntry.schoolName,
+        role: editingEntry.role,
+        startDate: new Date(editingEntry.startDate).toISOString().split("T")[0],
+        endDate: editingEntry.endDate ? new Date(editingEntry.endDate).toISOString().split("T")[0] : "",
+        isCurrent: editingEntry.isCurrent || false,
+        description: editingEntry.description || "",
+      });
+    } else {
+      form.reset({
+        schoolName: "",
+        role: "",
+        startDate: "",
+        endDate: "",
+        isCurrent: false,
+        description: "",
+      });
+    }
+  }, [editingEntry, open, form]);
 
   const isCurrent = form.watch("isCurrent");
 
@@ -403,12 +422,29 @@ function CertificationModal({
 }) {
   const form = useForm<CertificationInput>({
     resolver: zodResolver(certificationSchema),
-    defaultValues: editingEntry ? {
-      ...editingEntry,
-      issuedAt: new Date(editingEntry.issuedAt).toISOString().split("T")[0],
-      expiresAt: editingEntry.expiresAt ? new Date(editingEntry.expiresAt).toISOString().split("T")[0] : "",
-    } : {},
+    defaultValues: {},
   });
+
+  // Reset form when editingEntry changes
+  useEffect(() => {
+    if (editingEntry) {
+      form.reset({
+        name: editingEntry.name,
+        issuedBy: editingEntry.issuedBy,
+        issuedAt: new Date(editingEntry.issuedAt).toISOString().split("T")[0],
+        expiresAt: editingEntry.expiresAt ? new Date(editingEntry.expiresAt).toISOString().split("T")[0] : "",
+        credentialId: editingEntry.credentialId || "",
+      });
+    } else {
+      form.reset({
+        name: "",
+        issuedBy: "",
+        issuedAt: "",
+        expiresAt: "",
+        credentialId: "",
+      });
+    }
+  }, [editingEntry, open, form]);
 
   const onSubmit = async (data: CertificationInput) => {
     const url = editingEntry ? `/api/profile/certifications/${editingEntry.id}` : "/api/profile/certifications";
@@ -531,6 +567,17 @@ export default function ProfilePage() {
   const [editingExperience, setEditingExperience] = useState<any>(null);
   const [editingCertification, setEditingCertification] = useState<any>(null);
 
+  // School form state (must be at top level, not in conditional)
+  const [schoolForm, setSchoolForm] = useState({
+    schoolName: "",
+    city: "",
+    board: "",
+    address: "",
+    website: "",
+    about: "",
+  });
+  const [schoolSaving, setSchoolSaving] = useState(false);
+
   // Form for teacher profile (basic + specializations)
   const form = useForm<TeacherProfileInput>({
     resolver: zodResolver(teacherProfileSchema),
@@ -549,10 +596,22 @@ export default function ProfilePage() {
           // Calculate completion
           const { percentage } = calculateProfileCompletion(data.data);
           setCompletion(percentage);
+
+          // Initialize school form if school admin
+          if (isSchool) {
+            setSchoolForm({
+              schoolName: data.data?.schoolName || "",
+              city: data.data?.city || "",
+              board: data.data?.board || "",
+              address: data.data?.address || "",
+              website: data.data?.website || "",
+              about: data.data?.about || "",
+            });
+          }
         }
       })
       .finally(() => setLoading(false));
-  }, [form]);
+  }, [form, isSchool]);
 
   const handleProfileSave = async (formData: TeacherProfileInput) => {
     setSaving(true);
@@ -646,45 +705,188 @@ export default function ProfilePage() {
     );
   }
 
-  // School profile form (keep existing)
+  // School profile form
   if (isSchool) {
+    const handleSchoolChange = (key: string, value: any) => {
+      setSchoolForm((prev) => ({ ...prev, [key]: value }));
+    };
+
+    const handleSchoolSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!schoolForm.schoolName.trim() || !schoolForm.city || !schoolForm.board) {
+        toast.error("Please fill in all required fields");
+        return;
+      }
+
+      setSchoolSaving(true);
+
+      try {
+        const res = await fetch("/api/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            schoolName: schoolForm.schoolName,
+            city: schoolForm.city,
+            board: schoolForm.board,
+            address: schoolForm.address || undefined,
+            website: schoolForm.website || undefined,
+            about: schoolForm.about || undefined,
+          }),
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          setProfileData(data.data);
+          toast.success("School profile saved");
+        } else {
+          toast.error(data.error?.schoolName?.[0] || data.error || "Failed to save");
+        }
+      } catch {
+        toast.error("Network error");
+      } finally {
+        setSchoolSaving(false);
+      }
+    };
+
     return (
       <div>
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <h1 className="font-display text-[26px] font-bold text-gray-900 tracking-[-0.02em]">
-              School Profile
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Update your school's information for job listings
-            </p>
-          </div>
+        <div className="mb-6">
+          <h1 className="font-display text-[26px] font-bold text-gray-900 tracking-[-0.02em]">
+            School Profile
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Update your school's information for job listings
+          </p>
         </div>
 
-        <div className="card p-6">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">School name</label>
-              <input
-                type="text"
-                defaultValue={profileData?.schoolName || ""}
-                className="input-base"
-                placeholder="School name"
-              />
+        <form onSubmit={handleSchoolSubmit} className="space-y-5">
+          {/* Basic Info */}
+          <div className="card p-6">
+            <div className="flex items-center gap-2 pb-3 mb-4 border-b border-black/[0.05]">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-[0.07em]">
+                School Information
+              </h2>
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">City</label>
-              <select defaultValue={profileData?.city || ""} className="input-base appearance-none">
-                <option value="">Select city</option>
-                {LOCATIONS.map((l) => (
-                  <option key={l} value={l}>
-                    {l}
-                  </option>
-                ))}
-              </select>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  School Name *
+                </label>
+                <input
+                  type="text"
+                  value={schoolForm.schoolName}
+                  onChange={(e) => handleSchoolChange("schoolName", e.target.value)}
+                  className="input-base"
+                  placeholder="Your school name"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    City *
+                  </label>
+                  <select
+                    value={schoolForm.city}
+                    onChange={(e) => handleSchoolChange("city", e.target.value)}
+                    className="input-base appearance-none"
+                    required
+                  >
+                    <option value="">Select city</option>
+                    {LOCATIONS.map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Board *
+                  </label>
+                  <select
+                    value={schoolForm.board}
+                    onChange={(e) => handleSchoolChange("board", e.target.value)}
+                    className="input-base appearance-none"
+                    required
+                  >
+                    <option value="">Select board</option>
+                    {BOARDS.map((b) => (
+                      <option key={b.value} value={b.value}>
+                        {b.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Address
+                </label>
+                <input
+                  type="text"
+                  value={schoolForm.address}
+                  onChange={(e) => handleSchoolChange("address", e.target.value)}
+                  className="input-base"
+                  placeholder="School address"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Website
+                </label>
+                <input
+                  type="url"
+                  value={schoolForm.website}
+                  onChange={(e) => handleSchoolChange("website", e.target.value)}
+                  className="input-base"
+                  placeholder="https://yourschool.edu.in"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  About Your School
+                </label>
+                <textarea
+                  value={schoolForm.about}
+                  onChange={(e) => handleSchoolChange("about", e.target.value)}
+                  className="input-base min-h-[100px] resize-vertical"
+                  placeholder="Tell teachers about your school, its vision, and why they should join..."
+                  maxLength={2000}
+                />
+                <p className="text-xs text-gray-400 mt-1">{schoolForm.about.length}/2000</p>
+              </div>
             </div>
           </div>
-        </div>
+
+          {/* Submit Button */}
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={schoolSaving}
+              className="flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white rounded-xl font-semibold text-sm hover:bg-brand-700 disabled:opacity-50 transition-colors"
+            >
+              {schoolSaving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <Save size={16} />
+                  Save Changes
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     );
   }
