@@ -14,6 +14,7 @@
     "db:seed:jobs": "tsx db-scripts/seed-jobs.ts",
     "db:seed:schools": "tsx db-scripts/seed-schools.ts",
     "db:seed:phase4": "tsx scripts/seed-phase4.ts",
+    "db:reseed:demo": "tsx scripts/reseed-demo-data.ts",
     "db:generate": "prisma generate"
   },
   "dependencies": {

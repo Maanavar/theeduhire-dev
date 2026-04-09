@@ -81,34 +81,37 @@ export async function GET(req: NextRequest) {
       trend.push({ date: dateStr, applications: Number(count) });
     }
 
-    // 3. Job performance (per active/recent job)
-    const jobPerformanceData = await prisma.jobPosting.findMany({
-      where: schoolId ? { schoolId } : undefined,
-      select: {
-        id: true,
-        title: true,
-        _count: { select: { applications: true } },
-      },
-      orderBy: { postedAt: "desc" },
-      take: 10,
-    });
+    // 3. Job performance (per active/recent job) — optimized with single raw query
+    const jobPerformanceData = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        title: string;
+        applicationCount: bigint;
+        shortlistedCount: bigint;
+        hiredCount: bigint;
+      }>
+    >`
+      SELECT
+        jp.id,
+        jp.title,
+        COUNT(a.id) as "applicationCount",
+        COUNT(CASE WHEN a.status = 'SHORTLISTED' THEN 1 END) as "shortlistedCount",
+        COUNT(CASE WHEN a.status = 'HIRED' THEN 1 END) as "hiredCount"
+      FROM "job_postings" jp
+      LEFT JOIN "applications" a ON jp.id = a."job_id"
+      WHERE jp.id = ANY(${jobIds}::uuid[])
+      GROUP BY jp.id, jp.title
+      ORDER BY jp."posted_at" DESC
+      LIMIT 10
+    `;
 
-    const jobPerformance = await Promise.all(
-      jobPerformanceData.map(async (job) => {
-        const stats = await prisma.application.findMany({
-          where: { jobId: job.id },
-          select: { status: true },
-        });
-
-        return {
-          jobId: job.id,
-          title: job.title,
-          applicationCount: stats.length,
-          shortlistedCount: stats.filter((a) => a.status === "SHORTLISTED").length,
-          hiredCount: stats.filter((a) => a.status === "HIRED").length,
-        };
-      })
-    );
+    const jobPerformance = jobPerformanceData.map((job) => ({
+      jobId: job.id,
+      title: job.title,
+      applicationCount: Number(job.applicationCount),
+      shortlistedCount: Number(job.shortlistedCount),
+      hiredCount: Number(job.hiredCount),
+    }));
 
     // 4. Recent activity (last 10 status changes)
     const recentActivity = await prisma.applicationStatusHistory.findMany({
@@ -128,8 +131,8 @@ export async function GET(req: NextRequest) {
     });
 
     const recentActivityFormatted = recentActivity.map((entry) => ({
-      applicantName: entry.application.applicant.name,
-      jobTitle: entry.application.job.title,
+      applicantName: entry.application.applicant.name ?? "Unknown Applicant",
+      jobTitle: entry.application.job.title ?? "Unknown Job",
       toStatus: entry.toStatus,
       changedAt: entry.changedAt.toISOString(),
     }));

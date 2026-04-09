@@ -48,8 +48,16 @@ export async function POST(
       data: {
         jobId,
         applicantId: auth.user.id,
+        status: "PENDING",
         coverLetter: parsed.data.coverLetter || null,
         resumeId: parsed.data.resumeId || null,
+        statusHistory: {
+          create: {
+            fromStatus: "PENDING",
+            toStatus: "PENDING",
+            changedBy: auth.user.id,
+          },
+        },
       },
     });
 

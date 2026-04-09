@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Loader2, AlertCircle, Sparkles, TrendingUp } from 'lucide-react';
 import { RecommendationCard } from '@/components/recommendations/recommendation-card';
+import JobDetailModal from '@/components/jobs/job-detail-modal';
 import type { JobRecommendation } from '@/types';
 
 export default function RecommendationsPage() {
@@ -17,6 +18,8 @@ export default function RecommendationsPage() {
   const [filterSubject, setFilterSubject] = useState<string>('');
   const [filterBoard, setFilterBoard] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const selectedJob = recommendations.find(r => r.id === selectedJobId);
 
   // Redirect non-teachers
   useEffect(() => {
@@ -212,10 +215,21 @@ export default function RecommendationsPage() {
       {filteredRecommendations.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredRecommendations.map((rec) => (
-            <RecommendationCard key={rec.id} recommendation={rec} />
+            <RecommendationCard 
+              key={rec.id} 
+              recommendation={rec}
+              onClick={() => setSelectedJobId(rec.id)}
+            />
           ))}
         </div>
       )}
+      <JobDetailModal
+        open={!!selectedJobId}
+        jobId={selectedJobId}
+        onClose={() => setSelectedJobId(null)}
+        jobTitle={selectedJob?.title}
+      />
+
     </div>
   );
 }
