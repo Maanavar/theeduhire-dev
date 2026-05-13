@@ -4,10 +4,17 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "./prisma";
 import type { UserRole } from "@prisma/client";
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 
-const SECRET = process.env.NEXTAUTH_SECRET || "fallback-dev-secret";
+const SECRET = process.env.NEXTAUTH_SECRET;
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+
+function getRequiredSecret(): string {
+  if (!SECRET) {
+    throw new Error("NEXTAUTH_SECRET is required");
+  }
+  return SECRET;
+}
 
 declare module "next-auth" {
   interface Session {
@@ -16,6 +23,7 @@ declare module "next-auth" {
       email: string;
       name: string;
       role: UserRole;
+      sessionToken?: string;
       image?: string | null;
     };
   }
@@ -28,6 +36,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     id: string;
     role: UserRole;
+    sessionToken?: string;
   }
 }
 
@@ -79,13 +88,20 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid email or password");
         }
 
+        const suspensionActive =
+          user.isSuspended &&
+          (!user.suspendedUntil || user.suspendedUntil.getTime() > Date.now());
+        if (suspensionActive) {
+          throw new Error("This account is temporarily unavailable. Please contact EduHire support.");
+        }
+
         const isValid = await compare(credentials.password, user.hashedPassword);
         if (!isValid) {
           throw new Error("Invalid email or password");
         }
 
         if (!user.emailVerified) {
-          throw new Error("Please verify your email address before signing in. Check your inbox for the verification link.");
+          throw new Error("Sign in unavailable. Check your credentials and verify your email before trying again.");
         }
 
         return {
@@ -100,10 +116,10 @@ export const authOptions: NextAuthOptions = {
 
   callbacks: {
     async signIn({ user, account }) {
-      if (account?.provider === "google") {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email! },
-        });
+        if (account?.provider === "google") {
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email! },
+          });
 
         if (!existingUser) {
           // Google signup always creates a Teacher account
@@ -124,6 +140,12 @@ export const authOptions: NextAuthOptions = {
           user.id = newUser.id;
           user.role = newUser.role;
         } else {
+          const suspensionActive =
+            existingUser.isSuspended &&
+            (!existingUser.suspendedUntil || existingUser.suspendedUntil.getTime() > Date.now());
+          if (suspensionActive) {
+            return false;
+          }
           user.id = existingUser.id;
           user.role = existingUser.role;
         }
@@ -136,6 +158,21 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.sessionToken = randomUUID();
+        const db = prisma as any;
+        await db.userSession.create({
+          data: {
+            userId: user.id,
+            sessionToken: token.sessionToken,
+          },
+        });
+        await db.securityEvent.create({
+          data: {
+            userId: user.id,
+            eventType: "SESSION_CREATED",
+            metadata: { sessionToken: token.sessionToken },
+          },
+        });
       }
       return token;
     },
@@ -144,6 +181,14 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id;
         session.user.role = token.role;
+        session.user.sessionToken = token.sessionToken;
+        if (token.id && token.sessionToken) {
+          const db = prisma as any;
+          await db.userSession.updateMany({
+            where: { userId: token.id, sessionToken: token.sessionToken, revokedAt: null },
+            data: { lastActiveAt: new Date() },
+          });
+        }
       }
       return session;
     },
@@ -151,14 +196,16 @@ export const authOptions: NextAuthOptions = {
 };
 
 export function generateVerificationToken(userId: string): string {
+  const secret = getRequiredSecret();
   const timestamp = Date.now();
   const payload = userId + ":" + timestamp;
-  const sig = createHmac("sha256", SECRET).update(payload).digest("hex");
+  const sig = createHmac("sha256", secret).update(payload).digest("hex");
   return Buffer.from(payload + ":" + sig).toString("base64url");
 }
 
 export function verifyToken(token: string): { userId: string; valid: boolean; expired?: boolean } {
   try {
+    const secret = getRequiredSecret();
     const decoded = Buffer.from(token, "base64url").toString("utf8");
     const lastColon = decoded.lastIndexOf(":");
     const secondLastColon = decoded.lastIndexOf(":", lastColon - 1);
@@ -172,7 +219,7 @@ export function verifyToken(token: string): { userId: string; valid: boolean; ex
     if (isNaN(timestamp)) return { userId: "", valid: false };
     if (Date.now() - timestamp > TOKEN_TTL_MS) return { userId, valid: false, expired: true };
 
-    const expected = createHmac("sha256", SECRET).update(payload).digest("hex");
+    const expected = createHmac("sha256", secret).update(payload).digest("hex");
     const sigBuf = Buffer.from(sig, "hex");
     const expBuf = Buffer.from(expected, "hex");
     if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {

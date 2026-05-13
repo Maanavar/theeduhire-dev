@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const auth = await requireAuth(["TEACHER", "ADMIN"]);
+    const auth = await requireAuth(["TEACHER"]);
     if ("error" in auth) {
       return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }
@@ -24,14 +24,14 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true, data: saved });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, error: "Failed to fetch saved jobs" }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await requireAuth(["TEACHER", "ADMIN"]);
+    const auth = await requireAuth(["TEACHER"]);
     if ("error" in auth) {
       return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true, data: { saved: true } }, { status: 201 });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, error: "Failed to save job" }, { status: 500 });
   }
 }

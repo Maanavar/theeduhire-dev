@@ -38,6 +38,14 @@ export const EXPERIENCE_LEVELS = [
   "3-5 years", "5+ years", "10+ years",
 ] as const;
 
+export const JOB_EXPERIENCE_LEVELS = [
+  { value: "FRESHER", label: "Fresher" },
+  { value: "ONE_TO_TWO_YEARS", label: "1-2 years" },
+  { value: "TWO_TO_FIVE_YEARS", label: "2-5 years" },
+  { value: "FIVE_TO_TEN_YEARS", label: "5-10 years" },
+  { value: "TEN_PLUS_YEARS", label: "10+ years" },
+] as const;
+
 export const APPLICATION_STATUSES = [
   { value: "PENDING", label: "Pending", color: "gray" },
   { value: "REVIEWED", label: "Reviewed", color: "blue" },
@@ -52,4 +60,31 @@ export const ALLOWED_RESUME_TYPES = [
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
+export const RESUME_BUCKET = "Resumes";
+export const AVATAR_BUCKET = "avatar";
+export const SCHOOL_LOGO_BUCKET = "school-logos";
+export const TEACHER_DEMO_VIDEO_BUCKET = "TeacherDemoVideos";
+export const TEACHER_LESSON_PLAN_BUCKET = "TeacherLessonPlans";
+export const MAX_DEMO_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+export const MAX_LESSON_PLAN_SIZE = 10 * 1024 * 1024; // 10MB
+export const ALLOWED_DEMO_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
+export const ALLOWED_DEMO_VIDEO_EXTENSIONS = ["mp4", "mov", "webm"];
+export const ALLOWED_LESSON_PLAN_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+export const ALLOWED_LESSON_PLAN_EXTENSIONS = ["pdf", "doc", "docx"];
+export const PRIVATE_ASSET_URL_TTL_SECONDS = 60 * 5;
+export const PASSWORD_HASH_ROUNDS = 12;
+export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
+export const PASSWORD_RESET_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+export const PASSWORD_RESET_IP_LIMIT = 5;
+export const PASSWORD_RESET_EMAIL_LIMIT = 3;
+export const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+export const AUTH_REGISTER_IP_LIMIT = 8;
+export const CONTACT_FORM_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+export const CONTACT_FORM_IP_LIMIT = 5;
+export const MESSAGE_CREATE_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+export const MESSAGE_CREATE_RATE_LIMIT = 20;
 export const JOBS_PER_PAGE = 20;

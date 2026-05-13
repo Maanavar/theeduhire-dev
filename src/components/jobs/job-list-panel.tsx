@@ -13,15 +13,15 @@ interface Props {
 
 function ListSkeleton() {
   return (
-    <div className="divide-y divide-black/[0.04]">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="px-4 py-4 space-y-2.5">
+    <div className="divide-y divide-[var(--eh-border)]">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div key={index} className="space-y-2.5 px-4 py-4">
           <div className="skeleton h-3.5 w-3/4 rounded-lg" />
           <div className="skeleton h-3 w-1/2 rounded" />
           <div className="flex gap-1.5">
-            <div className="skeleton h-5 w-16 rounded-md" />
-            <div className="skeleton h-5 w-12 rounded-md" />
-            <div className="skeleton h-5 w-14 rounded-md" />
+            <div className="skeleton h-6 w-16 rounded-full" />
+            <div className="skeleton h-6 w-12 rounded-full" />
+            <div className="skeleton h-6 w-14 rounded-full" />
           </div>
           <div className="flex justify-between">
             <div className="skeleton h-3 w-20 rounded" />
@@ -35,16 +35,20 @@ function ListSkeleton() {
 
 export default function JobListPanel({ jobs, selectedId, onSelect, total, isLoading }: Props) {
   return (
-    <div className="overflow-y-auto max-h-[calc(100vh-220px)] lg:max-h-[calc(100vh-200px)] scrollbar-thin">
-      {/* Sticky header */}
-      <div className="sticky top-0 z-[2] px-4 py-2.5 border-b border-black/[0.05]"
-        style={{ background: "rgba(255,255,255,0.95)", backdropFilter: "blur(8px)" }}>
+    <div className="scrollbar-thin max-h-[calc(100vh-220px)] overflow-y-auto lg:max-h-[calc(100vh-200px)]">
+      <div
+        className="sticky top-0 z-[2] border-b border-[var(--eh-border)] px-4 py-3"
+        style={{ background: "rgba(246,247,249,0.92)", backdropFilter: "blur(10px)" }}
+      >
         {isLoading ? (
           <div className="skeleton h-3 w-24 rounded" />
         ) : (
-          <span className="text-xs font-semibold text-gray-400">
-            {total} position{total !== 1 ? "s" : ""} found
-          </span>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">Results</p>
+            <p className="mt-1 text-[13px] font-medium text-[var(--eh-text-2)]">
+              {total} position{total !== 1 ? "s" : ""} found
+            </p>
+          </div>
         )}
       </div>
 
@@ -64,17 +68,19 @@ export default function JobListPanel({ jobs, selectedId, onSelect, total, isLoad
       )}
 
       {!isLoading && jobs.length === 0 && (
-        <div className="text-center py-16 px-6">
-          <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-gray-400">
-              <circle cx="9" cy="9" r="7" stroke="currentColor" strokeWidth="1.5"/>
-              <path d="M14 14l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        <div className="px-6 py-16 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-[var(--eh-text-4)]">
+              <circle cx="9" cy="9" r="7" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M14 14l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </div>
-          <h3 className="font-display text-[16px] font-semibold text-gray-500 italic mb-1">
+          <h3 className="font-display text-[22px] leading-[1] tracking-[-0.03em] text-[var(--eh-text)]">
             No jobs found
           </h3>
-          <p className="text-xs text-gray-400">Try adjusting your filters or search terms</p>
+          <p className="mt-3 text-sm leading-[1.6] text-[var(--eh-text-3)]">
+            Try broadening your filters or search terms.
+          </p>
         </div>
       )}
     </div>

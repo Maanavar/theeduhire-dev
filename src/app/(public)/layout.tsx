@@ -9,7 +9,7 @@ export default function PublicLayout({
   return (
     <>
       <Navbar />
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 transition-opacity duration-200">{children}</main>
       <Footer />
     </>
   );

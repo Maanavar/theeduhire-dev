@@ -7,6 +7,22 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.EMAIL_FROM || "EduHire <noreply@theeduhire.in>";
 const BASE_URL = process.env.NEXTAUTH_URL || "https://theeduhire.in";
 
+function isEmailDeliveryConfigured() {
+  return Boolean(process.env.RESEND_API_KEY?.trim());
+}
+
+async function deliverEmail(payload: Parameters<typeof resend.emails.send>[0]) {
+  if (!isEmailDeliveryConfigured()) {
+    console.warn("[email] RESEND_API_KEY is missing. Email was not sent.", {
+      to: payload.to,
+      subject: payload.subject,
+    });
+    return { success: false, skipped: true, reason: "missing_resend_api_key" } as const;
+  }
+
+  return resend.emails.send(payload);
+}
+
 // ── Shared HTML helpers ──────────────────────────────────────────────────────
 
 function emailWrapper(content: string): string {
@@ -63,7 +79,7 @@ export async function sendVerificationEmail(email: string, name: string, token: 
     return { success: true };
   }
 
-  return resend.emails.send({ from: FROM, to: email, subject: "Verify your EduHire account", html });
+  return deliverEmail({ from: FROM, to: email, subject: "Verify your EduHire account", html });
 }
 
 // ── 2. Application Confirmation (to Teacher) ─────────────────────────────────
@@ -95,7 +111,7 @@ export async function sendApplicationConfirmation({
     <p>You can track all your applications in your <a href="${BASE_URL}/dashboard/applications" style="color:#2a7a4e">dashboard</a>.</p>
   `);
 
-  return resend.emails.send({ from: FROM, to: teacherEmail, subject: `Application received — ${jobTitle} at ${schoolName}`, html });
+  return deliverEmail({ from: FROM, to: teacherEmail, subject: `Application received — ${jobTitle} at ${schoolName}`, html });
 }
 
 // ── 3. Application Status Update (to Teacher) ────────────────────────────────
@@ -140,7 +156,6 @@ export async function sendStatusUpdate({
 }) {
   const copy = STATUS_COPY[newStatus];
   if (!copy) return; // Don't send email for PENDING
-
   const jobUrl = `${BASE_URL}/jobs/${jobId}`;
   const html = emailWrapper(`
     <h1>${copy.label}</h1>
@@ -151,10 +166,11 @@ export async function sendStatusUpdate({
       <div class="detail-row"><span class="detail-label">School</span><span class="detail-value">${schoolName}</span></div>
       <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="badge ${copy.badge}">${newStatus}</span></span></div>
     </div>
-    <a href="${BASE_URL}/dashboard/applications" class="btn">View All Applications</a>
+    <a href="${jobUrl}" class="btn">View Job Posting</a>
+    <p>You can also follow all application progress in your <a href="${BASE_URL}/dashboard/applications" style="color:#2a7a4e">dashboard</a>.</p>
   `);
 
-  return resend.emails.send({
+  return deliverEmail({
     from: FROM,
     to: teacherEmail,
     subject: `${copy.label} — ${jobTitle} at ${schoolName}`,
@@ -177,7 +193,7 @@ export async function sendNewApplicationAlert({
   jobTitle: string;
   jobId: string;
 }) {
-  const applicantsUrl = `${BASE_URL}/dashboard/my-jobs/${jobId}/applicants`;
+  const applicantsUrl = `${BASE_URL}/dashboard/applicants?jobId=${jobId}`;
   const html = emailWrapper(`
     <h1>New application received</h1>
     <p>Hi ${schoolName},</p>
@@ -186,7 +202,7 @@ export async function sendNewApplicationAlert({
     <p style="font-size:13px;color:#888780">Manage all applicants in your school dashboard.</p>
   `);
 
-  return resend.emails.send({
+  return deliverEmail({
     from: FROM,
     to: schoolEmail,
     subject: `New application for ${jobTitle}`,
@@ -215,7 +231,7 @@ export async function sendContactNotification({
     <p style="white-space:pre-wrap;background:#f4f4f0;border-radius:10px;padding:16px;font-size:14px">${message}</p>
   `);
 
-  return resend.emails.send({
+  return deliverEmail({
     from: FROM,
     to: adminEmail,
     subject: `Contact form: ${senderName}`,
@@ -223,8 +239,202 @@ export async function sendContactNotification({
   });
 }
 
+// ── 6. Job Alert Digest (to Teacher) ────────────────────────────────────────
+
+export async function sendJobAlertDigest({
+  teacherEmail,
+  alertName,
+  jobs,
+  frequency,
+}: {
+  teacherEmail: string;
+  alertName: string;
+  jobs: Array<{ id: string; title: string; subject: string; schoolName: string; city: string; salaryMin?: number; salaryMax?: number; description: string }>;
+  frequency: string;
+}) {
+  const manageAlertsUrl = `${BASE_URL}/dashboard/alerts`;
+
+  const jobCards = jobs
+    .map(
+      (job) => `
+    <div style="border:1px solid #e8e7e0;border-radius:10px;padding:16px;margin-bottom:12px">
+      <h3 style="margin:0 0 8px 0;font-size:16px;font-weight:600;color:#2a7a4e">${job.title}</h3>
+      <div style="font-size:14px;color:#555;margin-bottom:8px"><strong>${job.schoolName}</strong> • ${job.city}</div>
+      <div style="font-size:13px;color:#888780;margin-bottom:12px">
+        ${job.subject}${job.salaryMin ? ` • ₹${job.salaryMin}-${job.salaryMax || job.salaryMin}` : ""}
+      </div>
+      <p style="font-size:13px;color:#444441;margin:8px 0">${job.description.substring(0, 150)}...</p>
+      <a href="${BASE_URL}/jobs/${job.id}" style="color:#2a7a4e;font-weight:600;text-decoration:none;font-size:13px">View Details →</a>
+    </div>
+  `
+    )
+    .join("");
+
+  const html = emailWrapper(`
+    <h1>${jobs.length} new job${jobs.length !== 1 ? "s" : ""} for you</h1>
+    <p>Hi,</p>
+    <p>We found <strong>${jobs.length} new job${jobs.length !== 1 ? "s" : ""}</strong> matching your alert: <strong>${alertName}</strong></p>
+    <div style="margin:24px 0">${jobCards}</div>
+    <p style="font-size:13px;color:#888780">
+      You're receiving this email because you have a ${frequency.toLowerCase()} alert for "${alertName}".
+      <a href="${manageAlertsUrl}" style="color:#2a7a4e;text-decoration:none">Manage your alerts</a>
+    </p>
+  `);
+
+  return deliverEmail({
+    from: FROM,
+    to: teacherEmail,
+    subject: `${jobs.length} new ${alertName} job${jobs.length !== 1 ? "s" : ""} posted`,
+    html,
+  });
+}
+
+// ── 7. Interview Invite (to Teacher) ─────────────────────────────────────────
+
+export async function sendInterviewInvite({
+  teacherEmail,
+  teacherName,
+  jobTitle,
+  schoolName,
+  scheduledAt,
+  interviewType,
+  meetingLink,
+  location,
+  icsData,
+}: {
+  teacherEmail: string;
+  teacherName: string;
+  jobTitle: string;
+  schoolName: string;
+  scheduledAt: Date;
+  interviewType: string;
+  meetingLink?: string | null;
+  location?: string | null;
+  icsData?: Buffer;
+}) {
+  const interviewsUrl = `${BASE_URL}/dashboard/interviews`;
+  const dateStr = scheduledAt.toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  });
+
+  const locationStr = interviewType === "VIDEO" && meetingLink ? `<a href="${meetingLink}">${meetingLink}</a>` : location || interviewType;
+
+  const html = emailWrapper(`
+    <h1>Interview invitation</h1>
+    <p>Hi ${teacherName},</p>
+    <p><strong>${schoolName}</strong> has scheduled an interview with you for the <strong>${jobTitle}</strong> position.</p>
+    <div style="background:#f4f4f0;border-radius:10px;padding:16px;margin:16px 0">
+      <div class="detail-row"><span class="detail-label">Position</span><span class="detail-value">${jobTitle}</span></div>
+      <div class="detail-row"><span class="detail-label">School</span><span class="detail-value">${schoolName}</span></div>
+      <div class="detail-row"><span class="detail-label">Date & Time</span><span class="detail-value">${dateStr} IST</span></div>
+      <div class="detail-row"><span class="detail-label">Type</span><span class="detail-value">${interviewType}</span></div>
+      <div class="detail-row"><span class="detail-label">Location</span><span class="detail-value">${locationStr}</span></div>
+    </div>
+    <a href="${interviewsUrl}" class="btn">View Interview Details</a>
+    <p style="font-size:13px;color:#888780">A calendar invite has been attached to this email. You can add it directly to your calendar (Gmail, Outlook, Apple Calendar, etc).</p>
+  `);
+
+  const attachments: Array<{ filename: string; content: string }> = [];
+  if (icsData) {
+    attachments.push({
+      filename: "interview.ics",
+      content: icsData.toString("base64"),
+    });
+  }
+
+  return deliverEmail({
+    from: FROM,
+    to: teacherEmail,
+    subject: `Interview invitation — ${jobTitle} at ${schoolName}`,
+    html,
+    attachments: attachments.length > 0 ? attachments : undefined,
+  });
+}
+
+// ── 8. Interview Confirmation (to School) ────────────────────────────────────
+
+export async function sendInterviewConfirmation({
+  schoolEmail,
+  schoolName,
+  teacherName,
+  jobTitle,
+  scheduledAt,
+}: {
+  schoolEmail: string;
+  schoolName: string;
+  teacherName: string;
+  jobTitle: string;
+  scheduledAt: Date;
+}) {
+  const dateStr = scheduledAt.toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  });
+
+  const html = emailWrapper(`
+    <h1>Interview confirmed</h1>
+    <p>Hi ${schoolName},</p>
+    <p><strong>${teacherName}</strong> has confirmed the interview for the <strong>${jobTitle}</strong> position.</p>
+    <div style="background:#f4f4f0;border-radius:10px;padding:16px;margin:16px 0">
+      <div class="detail-row"><span class="detail-label">Candidate</span><span class="detail-value">${teacherName}</span></div>
+      <div class="detail-row"><span class="detail-label">Position</span><span class="detail-value">${jobTitle}</span></div>
+      <div class="detail-row"><span class="detail-label">Scheduled for</span><span class="detail-value">${dateStr} IST</span></div>
+      <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="badge badge-green">Confirmed</span></span></div>
+    </div>
+    <p style="font-size:13px;color:#888780">Make sure you're prepared for the interview at the scheduled time.</p>
+  `);
+
+  return deliverEmail({
+    from: FROM,
+    to: schoolEmail,
+    subject: `Interview confirmed — ${teacherName} for ${jobTitle}`,
+    html,
+  });
+}
+
+// ── 9. Interview Cancellation (to Both) ──────────────────────────────────────
+
+export async function sendInterviewCancellation({
+  email,
+  recipientName,
+  candidateName,
+  jobTitle,
+  schoolName,
+  reason,
+}: {
+  email: string;
+  recipientName: string;
+  candidateName: string;
+  jobTitle: string;
+  schoolName: string;
+  reason?: string;
+}) {
+  const html = emailWrapper(`
+    <h1>Interview cancelled</h1>
+    <p>Hi ${recipientName},</p>
+    <p>The scheduled interview for the <strong>${jobTitle}</strong> position at <strong>${schoolName}</strong> has been cancelled.</p>
+    <div style="background:#f4f4f0;border-radius:10px;padding:16px;margin:16px 0">
+      <div class="detail-row"><span class="detail-label">Candidate</span><span class="detail-value">${candidateName}</span></div>
+      <div class="detail-row"><span class="detail-label">Position</span><span class="detail-value">${jobTitle}</span></div>
+      <div class="detail-row"><span class="detail-label">School</span><span class="detail-value">${schoolName}</span></div>
+    </div>
+    ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
+    <p style="font-size:13px;color:#888780">If you have any questions, please contact the school directly.</p>
+  `);
+
+  return deliverEmail({
+    from: FROM,
+    to: email,
+    subject: `Interview cancelled — ${jobTitle} at ${schoolName}`,
+    html,
+  });
+}
+
 // ── Generic fallback ─────────────────────────────────────────────────────────
 
 export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
-  return resend.emails.send({ from: FROM, to, subject, html });
+  return deliverEmail({ from: FROM, to, subject, html });
 }

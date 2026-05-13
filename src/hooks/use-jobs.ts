@@ -27,7 +27,7 @@ export function useJobs() {
 
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
-    const keys = ["search", "subject", "location", "board", "gradeLevel", "page", "limit"];
+    const keys = ["search", "subject", "location", "board", "gradeLevel", "experienceLevel", "sort", "page", "limit", "urgent"];
     keys.forEach((key) => {
       const val = searchParams.get(key);
       if (val) params.set(key, val);

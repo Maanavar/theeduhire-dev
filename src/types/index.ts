@@ -9,6 +9,10 @@ import type {
   TeacherProfile,
   JobRequirement,
   JobBenefit,
+  ScreeningQuestion,
+  ApplicationStatusHistory,
+  ApplicationStatus,
+  Interview,
 } from "@prisma/client";
 
 // Job with all relations loaded (for detail view)
@@ -16,6 +20,7 @@ export type JobWithDetails = JobPosting & {
   school: SchoolProfile;
   requirements: JobRequirement[];
   benefits: JobBenefit[];
+  screeningQuestions: ScreeningQuestion[];
   _count?: { applications: number };
 };
 
@@ -23,7 +28,7 @@ export type JobWithDetails = JobPosting & {
 export type JobListItem = Pick<
   JobPosting,
   "id" | "title" | "subject" | "board" | "gradeLevel" | "jobType" |
-  "salaryMin" | "salaryMax" | "postedAt" | "status" | "experience"
+  "salaryMin" | "salaryMax" | "postedAt" | "status" | "experience" | "experienceLevel" | "isUrgent" | "requiredWithin48h" | "requiresTet"
 > & {
   school: Pick<SchoolProfile, "schoolName" | "city" | "verified" | "logoUrl">;
 };
@@ -48,4 +53,74 @@ export type ApiResponse<T> = {
     total: number;
     totalPages: number;
   };
+};
+
+// Status history with changedByUser details
+export type StatusHistoryEntry = ApplicationStatusHistory & {
+  changedByUser: Pick<User, "name">;
+};
+
+// Application with full history (Phase 3)
+export type ApplicationWithHistory = ApplicationWithJob & {
+  statusHistory: StatusHistoryEntry[];
+};
+
+// School analytics data (Phase 3)
+export type SchoolAnalytics = {
+  summary: {
+    totalJobs: number;
+    activeJobs: number;
+    totalApplications: number;
+    shortlisted: number;
+    hired: number;
+    avgTimeToHireDays: number | null;
+  };
+  trend: Array<{
+    date: string; // "2026-03-10"
+    applications: number;
+  }>;
+  jobPerformance: Array<{
+    jobId: string;
+    title: string;
+    applicationCount: number;
+    shortlistedCount: number;
+    hiredCount: number;
+  }>;
+  recentActivity: Array<{
+    applicantName: string;
+    jobTitle: string;
+    toStatus: ApplicationStatus;
+    changedAt: string;
+  }>;
+};
+
+// ─── Phase 4: Interview Scheduling + AI Matching ─
+
+// Interview with related application
+export type InterviewWithApplication = Interview & {
+  application: ApplicationWithJob;
+};
+
+// Match breakdown component scores
+export type MatchBreakdown = {
+  subject: number;
+  location: number;
+  board: number;
+  salary: number;
+  experience: number;
+  tet?: number;
+};
+
+// Job recommendation for teacher
+export type JobRecommendation = JobListItem & {
+  matchScore: number; // 0-100
+  explanation: string;
+  breakdown?: MatchBreakdown | null;
+};
+
+// Ranked candidate for school (for applicants list)
+export type RankedCandidate = ApplicationWithTeacher & {
+  matchScore: number; // 0-100
+  explanation: string;
+  interview?: Interview | null;
 };

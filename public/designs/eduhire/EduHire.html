@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>EduHire — Hi-fi design canvas</title>
+<link rel="preconnect" href="https://rsms.me/"/>
+<link rel="stylesheet" href="https://rsms.me/inter/inter.css"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap"/>
+<link rel="stylesheet" href="eduhire.css"/>
+<style>
+  html, body { margin: 0; height: 100%; background: #f0eee9; font-family: var(--eh-font-sans); }
+  #root { height: 100%; }
+  /* Make every artboard a proper sub-app: clip, positioned, baseline cursor. */
+  .eh-artboard-host { width: 100%; height: 100%; overflow: hidden; background: var(--eh-surface); position: relative; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="eduhire-shared.jsx"></script>
+<script type="text/babel" src="eduhire-marketing-auth.jsx"></script>
+<script type="text/babel" src="eduhire-school.jsx"></script>
+<script type="text/babel" src="eduhire-teacher.jsx"></script>
+<script type="text/babel" src="eduhire-shared-screens.jsx"></script>
+
+<script type="text/babel">
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "role": "school",
+    "color": "indigo",
+    "mode": "light"
+  }/*EDITMODE-END*/;
+
+  function App() {
+    const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+    React.useEffect(() => {
+      document.body.dataset.ehColor = tweaks.color;
+      document.body.dataset.ehMode = tweaks.mode;
+    }, [tweaks.color, tweaks.mode]);
+
+    const Frame = ({ children }) => <div className="eh-artboard-host">{children}</div>;
+    const r = tweaks.role; // some screens render differently per role
+
+    return (
+      <>
+        <DesignCanvas>
+
+          <DCSection id="overview" title="EduHire" subtitle="A hiring platform for schools and teachers · India · CBSE/ICSE/IB · ₹">
+            <DCPostIt top={-30} left={20} rotate={-3} width={220}>
+              Premium 2026 SaaS. Apple-calm + Material 3 components + Tesla-like confidence. Always WCAG 2.2 AA.
+            </DCPostIt>
+            <DCArtboard id="home" label="01 · Marketing homepage" width={1440} height={2400}>
+              <Frame><MarketingHome/></Frame>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="auth" title="Authentication & onboarding" subtitle="Friendly, secure-by-default. Email verification, strong-password rules, never reveals account existence.">
+            <DCArtboard id="login" label="02 · Sign in" width={1440} height={900}>
+              <Frame><Login/></Frame>
+            </DCArtboard>
+            <DCArtboard id="role" label="03 · Role select" width={1440} height={900}>
+              <Frame><SignupRoleSelect/></Frame>
+            </DCArtboard>
+            <DCArtboard id="signup" label="04 · Teacher signup" width={1440} height={900}>
+              <Frame><TeacherSignup/></Frame>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="school" title="School Admin" subtitle="Hiring workflow for principals, HR and recruitment coordinators.">
+            <DCArtboard id="sd" label="05 · Dashboard" width={1440} height={900}>
+              <Frame><SchoolDashboard/></Frame>
+            </DCArtboard>
+            <DCArtboard id="sj" label="06 · Jobs · all postings" width={1440} height={900}>
+              <Frame><SchoolJobs/></Frame>
+            </DCArtboard>
+            <DCArtboard id="pj" label="07 · Post a job" width={1440} height={900}>
+              <Frame><PostJob/></Frame>
+            </DCArtboard>
+            <DCArtboard id="ap" label="08 · Applicants for a job" width={1440} height={900}>
+              <Frame><Applicants/></Frame>
+            </DCArtboard>
+            <DCArtboard id="pl" label="09 · Pipeline (Kanban)" width={1440} height={900}>
+              <Frame><Pipeline/></Frame>
+            </DCArtboard>
+            <DCArtboard id="iv" label="10 · Interview scheduling" width={1440} height={900}>
+              <Frame><InterviewScheduling/></Frame>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="teacher" title="Teacher" subtitle='"Build your teaching profile once. Apply faster everywhere."'>
+            <DCArtboard id="td" label="11 · Home feed" width={1440} height={900}>
+              <Frame><TeacherDashboard/></Frame>
+            </DCArtboard>
+            <DCArtboard id="jd" label="12 · Job discovery" width={1440} height={900}>
+              <Frame><JobDiscovery/></Frame>
+            </DCArtboard>
+            <DCArtboard id="jdt" label="13 · Job detail" width={1440} height={900}>
+              <Frame><JobDetail/></Frame>
+            </DCArtboard>
+            <DCArtboard id="apply" label="14 · Apply flow · screening questions" width={1440} height={900}>
+              <Frame><ApplyFlow/></Frame>
+            </DCArtboard>
+            <DCArtboard id="myapps" label="15 · My applications" width={1440} height={900}>
+              <Frame><MyApplications/></Frame>
+            </DCArtboard>
+            <DCArtboard id="prof" label="16 · Teacher profile" width={1440} height={1000}>
+              <Frame><TeacherProfile/></Frame>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="comms" title="Messaging & notifications" subtitle="Both roles. Privacy guardrails on contact details until shortlisted.">
+            <DCArtboard id="msgS" label="17 · Messages · School view" width={1440} height={900}>
+              <Frame><Messages role="school"/></Frame>
+            </DCArtboard>
+            <DCArtboard id="msgT" label="18 · Messages · Teacher view" width={1440} height={900}>
+              <Frame><Messages role="teacher"/></Frame>
+            </DCArtboard>
+            <DCArtboard id="notT" label="19 · Notifications · Teacher" width={1440} height={900}>
+              <Frame><Notifications role="teacher"/></Frame>
+            </DCArtboard>
+            <DCArtboard id="notS" label="20 · Notifications · School" width={1440} height={900}>
+              <Frame><Notifications role="school"/></Frame>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="account" title="Account, security & system" subtitle="Settings, 2FA, sessions and the empty/error states the product falls back to.">
+            <DCArtboard id="settings" label="21 · Settings · Security" width={1440} height={900}>
+              <Frame><Settings role={r}/></Frame>
+            </DCArtboard>
+            <DCArtboard id="errors" label="22 · System & empty states" width={1440} height={900}>
+              <Frame><ErrorStates/></Frame>
+            </DCArtboard>
+          </DCSection>
+
+        </DesignCanvas>
+
+        <TweaksPanel title="Tweaks" defaultPosition={{ right: 24, bottom: 24 }}>
+          <TweakSection label="Role">
+            <TweakRadio
+              label="Active role for shared screens"
+              value={tweaks.role}
+              onChange={(v) => setTweak("role", v)}
+              options={[
+                { label: "School Admin", value: "school" },
+                { label: "Teacher", value: "teacher" },
+              ]}
+            />
+            <div style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.5 }}>
+              Settings, Notifications and Messages re-render with the selected role's chrome and content.
+            </div>
+          </TweakSection>
+
+          <TweakSection label="Brand color">
+            <TweakColor
+              label="Primary palette"
+              value={tweaks.color}
+              onChange={(v) => setTweak("color", v)}
+              options={[
+                { label: "Indigo", value: "indigo", swatch: "#4f46e5" },
+                { label: "Cobalt", value: "cobalt", swatch: "#2563eb" },
+                { label: "Teal", value: "teal", swatch: "#0d9488" },
+                { label: "Plum", value: "plum", swatch: "#7c3aed" },
+              ]}
+            />
+          </TweakSection>
+
+          <TweakSection label="Appearance">
+            <TweakRadio
+              label="Mode"
+              value={tweaks.mode}
+              onChange={(v) => setTweak("mode", v)}
+              options={[
+                { label: "Light", value: "light" },
+                { label: "Dark", value: "dark" },
+              ]}
+            />
+          </TweakSection>
+        </TweaksPanel>
+      </>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

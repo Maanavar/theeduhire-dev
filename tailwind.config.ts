@@ -5,17 +5,38 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        eh: {
+          primary: {
+            50: "#eef3f8",
+            100: "#dce6f1",
+            200: "#bed3e8",
+            300: "#94b9db",
+            400: "#5f9bd0",
+            500: "#0a66c2",
+            600: "#0a66c2",
+            700: "#004182",
+            800: "#083b73",
+            900: "#062d58",
+          },
+          surface: "#ffffff",
+          soft: "#f7f8fa",
+          muted: "#eef2f6",
+          border: "#e3e8ef",
+          text: "#101828",
+          text2: "#344054",
+          text3: "#667085",
+        },
         brand: {
-          50:  "#edfaf3",
-          100: "#d4f3e3",
-          200: "#a8e6c7",
-          300: "#71d3a5",
-          400: "#3db880",
-          500: "#1f9b63",
-          600: "#157d4e",
-          700: "#0f6340",
-          800: "#0a4e33",
-          900: "#063321",
+          50:  "#eef3f8",
+          100: "#dce6f1",
+          200: "#bed3e8",
+          300: "#94b9db",
+          400: "#5f9bd0",
+          500: "#0a66c2",
+          600: "#0a66c2",
+          700: "#004182",
+          800: "#083b73",
+          900: "#062d58",
         },
         accent: {
           50:  "#fff7ed",
@@ -26,13 +47,14 @@ const config: Config = {
         },
         // Semantic surface tokens
         surface: {
-          base:   "#f6f7f9",
+          base:   "#f4f6f8",
           raised: "#ffffff",
         },
       },
       fontFamily: {
-        display: ["'Lora'", "Georgia", "serif"],
-        body:    ["'Plus Jakarta Sans'", "system-ui", "sans-serif"],
+        display: ["'Fraunces'", "'Inter Tight'", "Georgia", "serif"],
+        body: ["'Inter Tight'", "'Inter'", "system-ui", "sans-serif"],
+        mono: ["'JetBrains Mono'", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       fontSize: {
         "2xs": ["0.6875rem", { lineHeight: "1rem" }],
@@ -72,8 +94,8 @@ const config: Config = {
         lg:      "0 10px 20px -4px rgba(0,0,0,0.08), 0 4px 8px rgba(0,0,0,0.04)",
         xl:      "0 20px 40px -8px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.04)",
         "2xl":   "0 32px 64px -16px rgba(0,0,0,0.2)",
-        brand:   "0 8px 24px rgba(31,155,99,0.18)",
-        "brand-lg": "0 16px 40px rgba(31,155,99,0.22)",
+        brand:   "0 8px 24px rgba(10,102,194,0.18)",
+        "brand-lg": "0 16px 40px rgba(10,102,194,0.22)",
         glass:   "0 8px 32px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.35)",
         inner:   "inset 0 2px 4px rgba(0,0,0,0.04)",
       },
@@ -89,8 +111,8 @@ const config: Config = {
       },
       backgroundImage: {
         "noise": "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E\")",
-        "brand-gradient": "linear-gradient(135deg, #1f9b63 0%, #0f6340 100%)",
-        "hero-radial": "radial-gradient(ellipse 80% 60% at 50% -10%, rgba(31,155,99,0.12) 0%, transparent 65%)",
+        "brand-gradient": "linear-gradient(135deg, #0a66c2 0%, #004182 100%)",
+        "hero-radial": "radial-gradient(ellipse 80% 60% at 50% -10%, rgba(10,102,194,0.12) 0%, transparent 65%)",
       },
       keyframes: {
         fadeUp: {

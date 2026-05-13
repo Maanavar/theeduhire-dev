@@ -9,7 +9,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase";
 import { prisma } from "@/lib/prisma";
-import { MAX_RESUME_SIZE, ALLOWED_RESUME_TYPES } from "@/config/constants";
+import { ALLOWED_RESUME_TYPES, MAX_RESUME_SIZE, RESUME_BUCKET } from "@/config/constants";
+import { createStorageObjectRef, ensureBucket, getResumeAccessPath } from "@/lib/storage";
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,12 +40,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    await ensureBucket(RESUME_BUCKET, "private", "5MB");
+
     const ext = file.name.split(".").pop() || "pdf";
     const storagePath = `${auth.user.id}/${Date.now()}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const { error: uploadError } = await supabaseAdmin.storage
-      .from("resumes")
+      .from(RESUME_BUCKET)
       .upload(storagePath, buffer, {
         contentType: file.type,
         upsert: false,
@@ -58,14 +61,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: urlData } = supabaseAdmin.storage
-      .from("resumes")
-      .getPublicUrl(storagePath);
-
     const resume = await prisma.resume.create({
       data: {
         userId: auth.user.id,
-        fileUrl: urlData.publicUrl,
+        fileUrl: createStorageObjectRef(RESUME_BUCKET, storagePath),
         fileName: file.name,
         fileSize: file.size,
       },
@@ -75,7 +74,7 @@ export async function POST(req: NextRequest) {
       success: true,
       data: {
         resumeId: resume.id,
-        fileUrl: resume.fileUrl,
+        fileUrl: getResumeAccessPath(resume.id),
         fileName: resume.fileName,
       },
     });

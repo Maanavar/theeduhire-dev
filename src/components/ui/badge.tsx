@@ -9,8 +9,8 @@ interface Props {
 }
 
 const variants = {
-  default: "bg-gray-100 text-gray-600 border-gray-200/60",
-  brand:   "bg-brand-50 text-brand-700 border-brand-100",
+  default: "border-slate-200 bg-slate-100 text-slate-700",
+  brand:   "border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] text-[var(--eh-primary-700)]",
   success: "bg-emerald-50 text-emerald-700 border-emerald-100",
   warning: "bg-amber-50 text-amber-700 border-amber-100",
   danger:  "bg-red-50 text-red-600 border-red-100",
@@ -18,8 +18,8 @@ const variants = {
 };
 
 const dotColors = {
-  default: "bg-gray-400",
-  brand:   "bg-brand-500",
+  default: "bg-slate-400",
+  brand:   "bg-[var(--eh-primary-500)]",
   success: "bg-emerald-500",
   warning: "bg-amber-500",
   danger:  "bg-red-500",
