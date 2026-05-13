@@ -5,7 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 import { z } from "zod";
-// import { JobStatus } from "@prisma/client";
+import { canManageJob } from "@/lib/policies/job-policy";
+import { getSchoolProfileIdForUser } from "@/lib/policies/application-policy";
 
 const schema = z.object({
   status: z.enum(["DRAFT", "ACTIVE", "CLOSED", "EXPIRED"]),
@@ -30,13 +31,16 @@ export async function PATCH(
 
     const job = await prisma.jobPosting.findUnique({
       where: { id },
-      select: { postedBy: true },
+      select: { postedBy: true, schoolId: true },
     });
 
     if (!job) {
       return NextResponse.json({ success: false, error: "Job not found" }, { status: 404 });
     }
-    if (job.postedBy !== auth.user.id && auth.user.role !== "ADMIN") {
+    const schoolProfileId = auth.user.role === "SCHOOL_ADMIN"
+      ? await getSchoolProfileIdForUser(prisma, auth.user.id)
+      : null;
+    if (!canManageJob(auth.user, { postedBy: job.postedBy, schoolId: job.schoolId }, schoolProfileId)) {
       return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
     }
 

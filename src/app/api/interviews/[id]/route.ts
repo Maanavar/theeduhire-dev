@@ -79,27 +79,74 @@ export async function PATCH(
       );
     }
 
-    // Update interview
-    const updatedInterview = await prisma.interview.update({
-      where: { id },
-      data: {
-        status,
-        teacherNotes: teacherNotes || interview.teacherNotes,
-        schoolNotes: schoolNotes || interview.schoolNotes,
-      },
-      include: {
-        application: {
-          include: {
-            job: { include: { school: true, poster: true } },
-            applicant: true,
+    const [updatedInterview] = await prisma.$transaction([
+      prisma.interview.update({
+        where: { id },
+        data: {
+          status,
+          teacherNotes: teacherNotes || interview.teacherNotes,
+          schoolNotes: schoolNotes || interview.schoolNotes,
+        },
+        include: {
+          application: {
+            include: {
+              job: { include: { school: true, poster: true } },
+              applicant: true,
+            },
           },
         },
-      },
+      }),
+      ...(status === "COMPLETED" && interview.application.status !== "INTERVIEW_COMPLETED"
+        ? [
+            prisma.application.update({
+              where: { id: interview.applicationId },
+              data: { status: "INTERVIEW_COMPLETED" },
+            }),
+            prisma.applicationStatusHistory.create({
+              data: {
+                applicationId: interview.applicationId,
+                fromStatus: interview.application.status,
+                toStatus: "INTERVIEW_COMPLETED",
+                changedBy: user.id,
+                note: "Interview marked as completed.",
+              },
+            }),
+          ]
+        : []),
+    ]);
+
+    await prisma.notification.createMany({
+      data: [
+        {
+          userId: interview.application.applicantId,
+          type: "INTERVIEW",
+          title: `Interview ${status.toLowerCase()}`,
+          body: `${interview.application.job.title} - ${interview.application.job.school.schoolName}`,
+          payload: {
+            interviewId: interview.id,
+            applicationId: interview.application.id,
+            jobId: interview.application.job.id,
+            status,
+          },
+        },
+        {
+          userId: interview.application.job.postedBy,
+          type: "INTERVIEW",
+          title: `Interview ${status.toLowerCase()}`,
+          body: `${interview.application.applicant.name} - ${interview.application.job.title}`,
+          payload: {
+            interviewId: interview.id,
+            applicationId: interview.application.id,
+            jobId: interview.application.job.id,
+            status,
+          },
+        },
+      ],
     });
 
     // Send confirmation emails based on status change
     if (status === "CONFIRMED" && isTeacher) {
-      // Teacher confirmed → notify school
+      // Teacher confirmed -> notify school
       sendInterviewConfirmation({
         schoolEmail: interview.application.job.poster.email,
         schoolName: interview.application.job.school.schoolName,
@@ -108,7 +155,7 @@ export async function PATCH(
         scheduledAt: interview.scheduledAt,
       }).catch((err) => console.error("[Confirmation Email Error]", err));
     } else if (status === "CANCELLED") {
-      // Interview cancelled → notify both parties
+      // Interview cancelled -> notify both parties
       sendInterviewCancellation({
         email: interview.application.applicant.email,
         recipientName: interview.application.applicant.name,

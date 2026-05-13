@@ -2,551 +2,95 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Save,
   Loader2,
-  CheckCircle2,
-  AlertCircle,
-  Upload,
-  Plus,
-  Trash2,
-  Edit2,
-  Copy,
-  X,
-  Calendar,
 } from "lucide-react";
-import Modal from "@/components/ui/modal";
-import FileUpload from "@/components/ui/file-upload";
 import { toast } from "@/components/ui/toast";
-import { SUBJECTS, BOARDS, LOCATIONS, GRADE_LEVELS, EXPERIENCE_LEVELS } from "@/config/constants";
+import { BOARDS, LOCATIONS } from "@/config/constants";
 import { calculateProfileCompletion } from "@/lib/profileCompletion";
 import {
+  ApiRequestError,
+  getApiErrorMessage,
+  getApiFieldError,
+} from "@/lib/api/client";
+import {
+  deleteCertification as deleteCertificationRequest,
+  deleteExperience as deleteExperienceRequest,
+  deleteResume as deleteResumeRequest,
+  getProfile,
+  type ProfileCertification,
+  type ProfileExperience,
+  type ProfilePageData,
+  requestSchoolVerification,
+  uploadSchoolLogo,
+  updateProfile,
+  uploadTeacherDocument,
+} from "@/lib/api/profile-client";
+import {
   teacherProfileSchema,
-  experienceSchema,
-  certificationSchema,
   type TeacherProfileInput,
-  type ExperienceInput,
-  type CertificationInput,
 } from "@/lib/validators/profile";
 import { cn } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
+import { PageHeader, PageShell, Panel, StatusBadge } from "@/components/layout/page-shell";
+import { ProfileHeaderCard as SharedProfileHeaderCard } from "@/components/profile/profile-header-card";
+import { ExperienceModal as ExtractedExperienceModal } from "@/components/profile/experience-modal";
+import { CertificationModal as ExtractedCertificationModal } from "@/components/profile/certification-modal";
+import { getSchoolProfileSections, getTeacherProfileSections } from "@/components/profile/profile-sections";
+import {
+  TeacherBasicInfoSection,
+  TeacherCredentialsSection,
+  TeacherSpecialisationsSection,
+} from "./_components/teacher-form-sections";
+import {
+  TeacherCertificationsSection,
+  TeacherExperienceSection,
+  TeacherResumeSection,
+} from "./_components/teacher-record-sections";
+
+const INDIAN_PHONE_REGEX = /^(\+91[-\s]?)?[6-9]\d{9}$/;
+const SECTION_FIELD_MAP: Record<string, Array<keyof TeacherProfileInput>> = {
+  "basic-info": ["name", "qualification", "experience", "currentSchool", "city", "bio", "phone", "expectedSalary", "availabilityStatus"],
+  specialisations: ["subjects", "preferredBoards", "preferredGrades", "preferredJobTypes"],
+  experience: [],
+  certifications: [],
+  "teaching-credentials": ["tetStatus", "noticePeriodDays", "teachingMediums", "pocsoAcknowledged", "referenceCheckDone", "codeOfConductSigned"],
+  resume: [],
+};
+
+function getTeacherFormDefaults(
+  data: ProfilePageData
+): Partial<TeacherProfileInput> {
+  return {
+    name: data.name || "",
+    qualification: data.qualification || "",
+    experience: (data.experience || "") as TeacherProfileInput["experience"],
+    currentSchool: data.currentSchool || "",
+    city: (data.city || "") as TeacherProfileInput["city"],
+    bio: data.bio || "",
+    phone: data.phone || "",
+    subjects: (data.subjects || []) as TeacherProfileInput["subjects"],
+    preferredBoards: (data.preferredBoards || []) as TeacherProfileInput["preferredBoards"],
+    preferredGrades: (data.preferredGrades || []) as TeacherProfileInput["preferredGrades"],
+    expectedSalary: data.expectedSalary ?? undefined,
+    availabilityStatus: (data.availabilityStatus ||
+      "NOT_LOOKING") as TeacherProfileInput["availabilityStatus"],
+    preferredJobTypes: (data.preferredJobTypes || []) as TeacherProfileInput["preferredJobTypes"],
+    noticePeriodDays: data.noticePeriodDays ?? undefined,
+    tetStatus: (data.tetStatus || undefined) as TeacherProfileInput["tetStatus"],
+    teachingMediums: (data.teachingMediums || []) as TeacherProfileInput["teachingMediums"],
+    pocsoAcknowledged: !!data.pocsoAcknowledged,
+    referenceCheckDone: !!data.referenceCheckDone,
+    codeOfConductSigned: !!data.codeOfConductSigned,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────
 // UI COMPONENTS
 // ─────────────────────────────────────────────────────────────
-
-function ChipGroup({
-  label,
-  options,
-  selected,
-  onChange,
-}: {
-  label: string;
-  options: readonly string[] | readonly { value: string; label: string }[];
-  selected: string[];
-  onChange: (vals: string[]) => void;
-}) {
-  const toggle = (val: string) =>
-    onChange(selected.includes(val) ? selected.filter((v) => v !== val) : [...selected, val]);
-
-  return (
-    <div className="flex flex-col gap-2">
-      <label className="text-xs font-semibold text-gray-500 uppercase tracking-[0.08em]">{label}</label>
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((opt) => {
-          const val = typeof opt === "string" ? opt : opt.value;
-          const lbl = typeof opt === "string" ? opt : opt.label;
-          const active = selected.includes(val);
-          return (
-            <button
-              key={val}
-              type="button"
-              onClick={() => toggle(val)}
-              className={cn(
-                "px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-[120ms]",
-                active
-                  ? "bg-brand-500 text-white border-brand-500 shadow-brand"
-                  : "bg-white text-gray-500 border-black/[0.09] hover:border-brand-400 hover:text-brand-600 hover:bg-brand-50"
-              )}
-            >
-              {lbl}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// PROFILE HEADER CARD
-// ─────────────────────────────────────────────────────────────
-
-function ProfileHeaderCard({
-  avatarUrl,
-  name,
-  availabilityStatus,
-  completion,
-  onAvatarChange,
-}: {
-  avatarUrl?: string | null;
-  name?: string;
-  availabilityStatus: string;
-  completion: number;
-  onAvatarChange: (url: string) => void;
-}) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
-
-  const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadingAvatar(true);
-    try {
-      const formData = new FormData();
-      formData.append("avatar", file);
-
-      const res = await fetch("/api/profile/avatar", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        onAvatarChange(data.data.avatarUrl);
-        toast.success("Photo updated");
-      } else {
-        toast.error(data.error || "Upload failed");
-      }
-    } catch {
-      toast.error("Network error");
-    } finally {
-      setUploadingAvatar(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const copyProfileLink = () => {
-    const { protocol, host } = window.location;
-    // Get userId from session — in a real app you'd pass this as a prop
-    const url = `${protocol}//${host}/profile/[userId]`;
-    navigator.clipboard.writeText(url);
-    toast.success("Profile link copied");
-  };
-
-  const getAvailabilityColor = () => {
-    switch (availabilityStatus) {
-      case "ACTIVELY_LOOKING":
-        return "bg-emerald-50 text-emerald-700 border-emerald-100";
-      case "OPEN_TO_OFFERS":
-        return "bg-amber-50 text-amber-700 border-amber-100";
-      default:
-        return "bg-gray-50 text-gray-700 border-gray-100";
-    }
-  };
-
-  const getAvailabilityLabel = () => {
-    switch (availabilityStatus) {
-      case "ACTIVELY_LOOKING":
-        return "Actively looking";
-      case "OPEN_TO_OFFERS":
-        return "Open to offers";
-      default:
-        return "Not looking";
-    }
-  };
-
-  return (
-    <div className="card p-6 mb-6">
-      <div className="flex items-start gap-6">
-        {/* Avatar */}
-        <div className="relative shrink-0">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleAvatarSelect}
-            className="hidden"
-            disabled={uploadingAvatar}
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploadingAvatar}
-            className="relative group"
-          >
-            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center text-white text-2xl font-bold overflow-hidden">
-{avatarUrl ? (
-  <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
-) : (
-  (name || "U").charAt(0).toUpperCase()  // ✅ FIX: provide fallback "U"
-)}
-
-            </div>
-            <div className="absolute inset-0 rounded-2xl bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-              <Upload size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-            {uploadingAvatar && (
-              <div className="absolute inset-0 rounded-2xl bg-black/50 flex items-center justify-center">
-                <Loader2 size={16} className="text-white animate-spin" />
-              </div>
-            )}
-          </button>
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-2 flex-wrap">
-            <h2 className="text-2xl font-bold text-gray-900 font-display">{name || "Teacher Profile"}</h2>
-            <span className={cn("inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border", getAvailabilityColor())}>
-              {getAvailabilityLabel()}
-            </span>
-          </div>
-
-          {/* Completion bar */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-gray-500">Profile completion</span>
-              <span className="text-xs font-bold text-brand-600">{completion}%</span>
-            </div>
-            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-brand-500 transition-all duration-500"
-                style={{ width: `${completion}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-2">
-            <button
-              onClick={copyProfileLink}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-brand-400 hover:text-brand-600 hover:bg-brand-50 transition-all"
-            >
-              <Copy size={13} /> Share profile
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// EXPERIENCE MODAL
-// ─────────────────────────────────────────────────────────────
-
-function ExperienceModal({
-  open,
-  editingEntry,
-  onClose,
-  onSaved,
-}: {
-  open: boolean;
-  editingEntry?: any;
-  onClose: () => void;
-  onSaved: (exp: any) => void;
-}) {
-  const form = useForm<ExperienceInput>({
-    resolver: zodResolver(experienceSchema),
-    defaultValues: {
-      isCurrent: false,
-    },
-  });
-
-  // Reset form when editingEntry changes
-  useEffect(() => {
-    if (editingEntry) {
-      form.reset({
-        schoolName: editingEntry.schoolName,
-        role: editingEntry.role,
-        startDate: new Date(editingEntry.startDate).toISOString().split("T")[0],
-        endDate: editingEntry.endDate ? new Date(editingEntry.endDate).toISOString().split("T")[0] : "",
-        isCurrent: editingEntry.isCurrent || false,
-        description: editingEntry.description || "",
-      });
-    } else {
-      form.reset({
-        schoolName: "",
-        role: "",
-        startDate: "",
-        endDate: "",
-        isCurrent: false,
-        description: "",
-      });
-    }
-  }, [editingEntry, open, form]);
-
-  const isCurrent = form.watch("isCurrent");
-
-  useEffect(() => {
-    if (isCurrent) {
-      form.setValue("endDate", null);
-    }
-  }, [isCurrent, form]);
-
-  const onSubmit = async (data: ExperienceInput) => {
-    const url = editingEntry ? `/api/profile/experience/${editingEntry.id}` : "/api/profile/experience";
-    const method = editingEntry ? "PUT" : "POST";
-
-    try {
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-
-      const result = await res.json();
-      if (result.success) {
-        onSaved(result.data.experience);
-        toast.success(editingEntry ? "Experience updated" : "Experience added");
-        onClose();
-        form.reset();
-      } else {
-        toast.error(result.error?.schoolName?.[0] || "Failed to save");
-      }
-    } catch {
-      toast.error("Network error");
-    }
-  };
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={editingEntry ? "Edit Experience" : "Add Experience"}
-      maxWidth="max-w-lg"
-    >
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">School name *</label>
-          <input
-            type="text"
-            {...form.register("schoolName")}
-            placeholder="e.g. Delhi Public School"
-            className="input-base"
-          />
-          {form.formState.errors.schoolName && (
-            <p className="text-xs text-red-600 mt-1">{form.formState.errors.schoolName.message}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Role *</label>
-          <input
-            type="text"
-            {...form.register("role")}
-            placeholder="e.g. Mathematics Teacher"
-            className="input-base"
-          />
-          {form.formState.errors.role && (
-            <p className="text-xs text-red-600 mt-1">{form.formState.errors.role.message}</p>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Start date *</label>
-            <input type="date" {...form.register("startDate")} className="input-base" />
-            {form.formState.errors.startDate && (
-              <p className="text-xs text-red-600 mt-1">{form.formState.errors.startDate.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">End date</label>
-            <input
-              type="date"
-              {...form.register("endDate")}
-              disabled={isCurrent}
-              className={cn("input-base", isCurrent && "opacity-50 cursor-not-allowed")}
-            />
-            {form.formState.errors.endDate && (
-              <p className="text-xs text-red-600 mt-1">{form.formState.errors.endDate.message}</p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input type="checkbox" {...form.register("isCurrent")} id="isCurrent" className="rounded" />
-          <label htmlFor="isCurrent" className="text-sm font-medium text-gray-700">
-            I currently work here
-          </label>
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
-          <textarea
-            {...form.register("description")}
-            placeholder="Your responsibilities and achievements..."
-            className="input-base min-h-[100px] resize-vertical"
-          />
-        </div>
-
-        <div className="flex gap-2 justify-end pt-4 border-t border-gray-100">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={form.formState.isSubmitting}
-            className="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50"
-          >
-            {form.formState.isSubmitting ? <Loader2 size={14} className="animate-spin" /> : "Save"}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// CERTIFICATION MODAL
-// ─────────────────────────────────────────────────────────────
-
-function CertificationModal({
-  open,
-  editingEntry,
-  onClose,
-  onSaved,
-}: {
-  open: boolean;
-  editingEntry?: any;
-  onClose: () => void;
-  onSaved: (cert: any) => void;
-}) {
-  const form = useForm<CertificationInput>({
-    resolver: zodResolver(certificationSchema),
-    defaultValues: {},
-  });
-
-  // Reset form when editingEntry changes
-  useEffect(() => {
-    if (editingEntry) {
-      form.reset({
-        name: editingEntry.name,
-        issuedBy: editingEntry.issuedBy,
-        issuedAt: new Date(editingEntry.issuedAt).toISOString().split("T")[0],
-        expiresAt: editingEntry.expiresAt ? new Date(editingEntry.expiresAt).toISOString().split("T")[0] : "",
-        credentialId: editingEntry.credentialId || "",
-      });
-    } else {
-      form.reset({
-        name: "",
-        issuedBy: "",
-        issuedAt: "",
-        expiresAt: "",
-        credentialId: "",
-      });
-    }
-  }, [editingEntry, open, form]);
-
-  const onSubmit = async (data: CertificationInput) => {
-    const url = editingEntry ? `/api/profile/certifications/${editingEntry.id}` : "/api/profile/certifications";
-    const method = editingEntry ? "PUT" : "POST";
-
-    try {
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-
-      const result = await res.json();
-      if (result.success) {
-        onSaved(result.data.certification);
-        toast.success(editingEntry ? "Certification updated" : "Certification added");
-        onClose();
-        form.reset();
-      } else {
-        toast.error(result.error?.name?.[0] || "Failed to save");
-      }
-    } catch {
-      toast.error("Network error");
-    }
-  };
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={editingEntry ? "Edit Certification" : "Add Certification"}
-      maxWidth="max-w-lg"
-    >
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Certification name *</label>
-          <input
-            type="text"
-            {...form.register("name")}
-            placeholder="e.g. B.Ed, M.Ed, CTET"
-            className="input-base"
-          />
-          {form.formState.errors.name && (
-            <p className="text-xs text-red-600 mt-1">{form.formState.errors.name.message}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Issued by *</label>
-          <input
-            type="text"
-            {...form.register("issuedBy")}
-            placeholder="e.g. University of Delhi"
-            className="input-base"
-          />
-          {form.formState.errors.issuedBy && (
-            <p className="text-xs text-red-600 mt-1">{form.formState.errors.issuedBy.message}</p>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Issued date *</label>
-            <input type="date" {...form.register("issuedAt")} className="input-base" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Expires on</label>
-            <input type="date" {...form.register("expiresAt")} className="input-base" />
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Credential ID</label>
-          <input
-            type="text"
-            {...form.register("credentialId")}
-            placeholder="Optional credential ID"
-            className="input-base"
-          />
-        </div>
-
-        <div className="flex gap-2 justify-end pt-4 border-t border-gray-100">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={form.formState.isSubmitting}
-            className="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50"
-          >
-            {form.formState.isSubmitting ? <Loader2 size={14} className="animate-spin" /> : "Save"}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────
 // MAIN PAGE
@@ -556,27 +100,53 @@ export default function ProfilePage() {
   const { data: session } = useSession();
   const isSchool = session?.user?.role === "SCHOOL_ADMIN";
 
-  const [profileData, setProfileData] = useState<any>(null);
+  const [profileData, setProfileData] = useState<ProfilePageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [completion, setCompletion] = useState(0);
+  const [phoneValidationError, setPhoneValidationError] = useState("");
+  const [uploadingDemoVideo, setUploadingDemoVideo] = useState(false);
+  const [uploadingLessonPlan, setUploadingLessonPlan] = useState(false);
 
   // Experience/Cert modals
   const [experienceModalOpen, setExperienceModalOpen] = useState(false);
   const [certificationModalOpen, setCertificationModalOpen] = useState(false);
-  const [editingExperience, setEditingExperience] = useState<any>(null);
-  const [editingCertification, setEditingCertification] = useState<any>(null);
+  const [editingExperience, setEditingExperience] = useState<ProfileExperience | null>(null);
+  const [editingCertification, setEditingCertification] = useState<ProfileCertification | null>(null);
 
   // School form state (must be at top level, not in conditional)
   const [schoolForm, setSchoolForm] = useState({
+    name: "",
     schoolName: "",
     city: "",
     board: "",
     address: "",
     website: "",
     about: "",
+    hasPfEsi: false,
+    paymentTrackRecord: "",
+    workingHours: "",
+    udiseCode: "",
   });
   const [schoolSaving, setSchoolSaving] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [requestingVerification, setRequestingVerification] = useState(false);
+  const [activeSection, setActiveSection] = useState("basic-info");
+  const [schoolActiveSection, setSchoolActiveSection] = useState("school-information");
+  const schoolLogoInputRef = useRef<HTMLInputElement>(null);
+  const schoolCompletion = (() => {
+    const checks = [
+      !!schoolForm.name?.trim(),
+      !!schoolForm.schoolName?.trim(),
+      !!schoolForm.city?.trim(),
+      !!schoolForm.board?.trim(),
+      !!schoolForm.address?.trim(),
+      !!schoolForm.website?.trim(),
+      !!schoolForm.about?.trim(),
+      !!profileData?.logoUrl,
+    ];
+    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  })();
 
   // Form for teacher profile (basic + specializations)
   const form = useForm<TeacherProfileInput>({
@@ -584,69 +154,116 @@ export default function ProfilePage() {
     defaultValues: {},
   });
 
+  const maybeTrackProfileCompleted = (percentage: number) => {
+    if (percentage < 100 || typeof window === "undefined") return;
+    const key = "eduhire_profile_completed_tracked";
+    if (window.localStorage.getItem(key)) return;
+    trackEvent("profile_completed", { completion: percentage });
+    window.localStorage.setItem(key, "1");
+  };
+
   // Load profile on mount
   useEffect(() => {
-    fetch("/api/profile")
-      .then((r) => r.json())
+    void getProfile()
       .then((data) => {
-        if (data.success) {
-          setProfileData(data.data);
-          // Update form defaults
-          form.reset(data.data);
-          // Calculate completion
-          const { percentage } = calculateProfileCompletion(data.data);
-          setCompletion(percentage);
+        setProfileData(data);
+        form.reset(getTeacherFormDefaults(data));
 
-          // Initialize school form if school admin
-          if (isSchool) {
-            setSchoolForm({
-              schoolName: data.data?.schoolName || "",
-              city: data.data?.city || "",
-              board: data.data?.board || "",
-              address: data.data?.address || "",
-              website: data.data?.website || "",
-              about: data.data?.about || "",
-            });
-          }
+        const { percentage } = calculateProfileCompletion(data);
+        setCompletion(percentage);
+        maybeTrackProfileCompleted(percentage);
+
+        if (isSchool) {
+          setSchoolForm({
+            name: data.name || "",
+            schoolName: data.schoolName || "",
+            city: data.city || "",
+            board: data.board || "",
+            address: data.address || "",
+            website: data.website || "",
+            about: data.about || "",
+            hasPfEsi: !!data.hasPfEsi,
+            paymentTrackRecord: data.paymentTrackRecord || "",
+            workingHours: data.workingHours || "",
+            udiseCode: data.udiseCode || "",
+          });
         }
+      })
+      .catch((error) => {
+        toast.error(getApiErrorMessage(error, "Failed to load profile"));
       })
       .finally(() => setLoading(false));
   }, [form, isSchool]);
 
-  const handleProfileSave = async (formData: TeacherProfileInput) => {
+  const saveProfilePatch = async (patch: Partial<TeacherProfileInput>, successMessage: string) => {
+    const normalizedPhone = patch.phone?.trim();
+    if (normalizedPhone && !INDIAN_PHONE_REGEX.test(normalizedPhone)) {
+      setPhoneValidationError("Enter a valid Indian mobile number");
+      toast.error("Please enter a valid Indian mobile number");
+      return;
+    }
+    setPhoneValidationError("");
+
     setSaving(true);
     try {
-      const res = await fetch("/api/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setProfileData(data.data);
-        const { percentage } = calculateProfileCompletion(data.data);
-        setCompletion(percentage);
-        toast.success("Profile saved");
+      const data = await updateProfile(patch);
+      setProfileData(data);
+      form.reset(getTeacherFormDefaults(data));
+      const { percentage } = calculateProfileCompletion(data);
+      setCompletion(percentage);
+      maybeTrackProfileCompleted(percentage);
+      toast.success(successMessage);
+    } catch (error) {
+      if (error instanceof ApiRequestError) {
+        toast.error(
+          getApiFieldError(error, "qualification") ||
+            getApiErrorMessage(error, "Failed to save")
+        );
       } else {
-        toast.error(data.error?.qualification?.[0] || "Failed to save");
+        toast.error(getApiErrorMessage(error, "Failed to save"));
       }
-    } catch {
-      toast.error("Network error");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleAvatarChange = (url: string) => {
-    setProfileData((prev: any) => ({ ...prev, avatarUrl: url }));
+  const handleActiveSectionSave = async () => {
+    const fields = SECTION_FIELD_MAP[activeSection] || [];
+
+    if (fields.length === 0) {
+      const autoSavedMessage =
+        activeSection === "experience"
+          ? "Experience entries save when you add or edit them."
+          : activeSection === "certifications"
+            ? "Certification entries save when you add or edit them."
+            : "Resume changes save during upload or delete.";
+      toast.success(autoSavedMessage);
+      return;
+    }
+
+    const isValid = await form.trigger(fields);
+    if (!isValid) {
+      toast.error("Please correct the highlighted fields in this section before saving.");
+      return;
+    }
+
+    const patch = Object.fromEntries(fields.map((field) => [field, form.getValues(field)])) as Partial<TeacherProfileInput>;
+    await saveProfilePatch(patch, `${activeSectionMeta.label} saved`);
   };
 
-  const handleExperienceAdded = (exp: any) => {
-    setProfileData((prev: any) => ({
-      ...prev,
-      experiences: [exp, ...(prev.experiences || [])],
-    }));
+  const handleAvatarChange = (url: string) => {
+    setProfileData((prev) => (prev ? { ...prev, avatarUrl: url } : prev));
+  };
+
+  const handleExperienceAdded = (exp: ProfileExperience) => {
+    setProfileData((prev) => (
+      prev
+        ? {
+            ...prev,
+            experiences: [exp, ...(prev.experiences || [])],
+          }
+        : prev
+    ));
     const { percentage } = calculateProfileCompletion({
       ...profileData,
       experiences: [exp, ...(profileData?.experiences || [])],
@@ -655,17 +272,26 @@ export default function ProfilePage() {
   };
 
   const handleExperienceDeleted = (id: string) => {
-    setProfileData((prev: any) => ({
-      ...prev,
-      experiences: prev.experiences.filter((e: any) => e.id !== id),
-    }));
+    setProfileData((prev) => {
+      if (!prev) return prev;
+      const next = {
+        ...prev,
+        experiences: prev.experiences?.filter((e) => e.id !== id) || [],
+      };
+      setCompletion(calculateProfileCompletion(next).percentage);
+      return next;
+    });
   };
 
-  const handleCertificationAdded = (cert: any) => {
-    setProfileData((prev: any) => ({
-      ...prev,
-      certifications: [cert, ...(prev.certifications || [])],
-    }));
+  const handleCertificationAdded = (cert: ProfileCertification) => {
+    setProfileData((prev) => (
+      prev
+        ? {
+            ...prev,
+            certifications: [cert, ...(prev.certifications || [])],
+          }
+        : prev
+    ));
     const { percentage } = calculateProfileCompletion({
       ...profileData,
       certifications: [cert, ...(profileData?.certifications || [])],
@@ -674,34 +300,144 @@ export default function ProfilePage() {
   };
 
   const handleCertificationDeleted = (id: string) => {
-    setProfileData((prev: any) => ({
-      ...prev,
-      certifications: prev.certifications.filter((c: any) => c.id !== id),
-    }));
+    setProfileData((prev) => {
+      if (!prev) return prev;
+      const next = {
+        ...prev,
+        certifications: prev.certifications?.filter((c) => c.id !== id) || [],
+      };
+      setCompletion(calculateProfileCompletion(next).percentage);
+      return next;
+    });
   };
 
   const handleResumeDeleted = (id: string) => {
-    setProfileData((prev: any) => ({
-      ...prev,
-      resumes: prev.resumes.filter((r: any) => r.id !== id),
-    }));
+    setProfileData((prev) => (
+      prev
+        ? {
+            ...prev,
+            resumes: prev.resumes?.filter((r) => r.id !== id) || [],
+          }
+        : prev
+    ));
     const { percentage } = calculateProfileCompletion({
       ...profileData,
-      resumes: profileData?.resumes?.filter((r: any) => r.id !== id) || [],
+      resumes: profileData?.resumes?.filter((r) => r.id !== id) || [],
     });
     setCompletion(percentage);
   };
 
+  const openExperienceCreateModal = () => {
+    setEditingExperience(null);
+    setExperienceModalOpen(true);
+  };
+
+  const openExperienceEditModal = (experience: any) => {
+    setEditingExperience(experience);
+    setExperienceModalOpen(true);
+  };
+
+  const deleteExperience = async (experienceId: string) => {
+    try {
+      await deleteExperienceRequest(experienceId);
+      handleExperienceDeleted(experienceId);
+      toast.success("Experience deleted");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to delete experience"));
+    }
+  };
+
+  const openCertificationCreateModal = () => {
+    setEditingCertification(null);
+    setCertificationModalOpen(true);
+  };
+
+  const openCertificationEditModal = (certification: any) => {
+    setEditingCertification(certification);
+    setCertificationModalOpen(true);
+  };
+
+  const deleteCertification = async (certificationId: string) => {
+    try {
+      await deleteCertificationRequest(certificationId);
+      handleCertificationDeleted(certificationId);
+      toast.success("Certification deleted");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to delete certification"));
+    }
+  };
+
+  const deleteResume = async (resumeId: string) => {
+    try {
+      await deleteResumeRequest(resumeId);
+      handleResumeDeleted(resumeId);
+      toast.success("Resume deleted");
+      return true;
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to delete resume"));
+      return false;
+    }
+  };
+
+  const refreshProfileData = async () => {
+    const data = await getProfile();
+    setProfileData(data);
+    form.reset(getTeacherFormDefaults(data));
+    const { percentage } = calculateProfileCompletion(data);
+    setCompletion(percentage);
+    maybeTrackProfileCompleted(percentage);
+  };
+
+  const uploadCredentialFile = async (file: File, key: "demoVideoUrl" | "lessonPlanUrl") => {
+    await uploadTeacherDocument(
+      key === "demoVideoUrl" ? "demoVideo" : "lessonPlan",
+      file
+    );
+    await refreshProfileData();
+    toast.success(key === "demoVideoUrl" ? "Demo video uploaded" : "Lesson plan uploaded");
+  };
+
+  const handlePhoneBlur = (value: string) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      setPhoneValidationError("");
+      return;
+    }
+    setPhoneValidationError(INDIAN_PHONE_REGEX.test(normalized) ? "" : "Enter a valid Indian mobile number");
+  };
+
+  const handleDemoVideoSelect = async (file: File) => {
+    setUploadingDemoVideo(true);
+    try {
+      await uploadCredentialFile(file, "demoVideoUrl");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to upload demo video");
+    } finally {
+      setUploadingDemoVideo(false);
+    }
+  };
+
+  const handleLessonPlanSelect = async (file: File) => {
+    setUploadingLessonPlan(true);
+    try {
+      await uploadCredentialFile(file, "lessonPlanUrl");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to upload lesson plan");
+    } finally {
+      setUploadingLessonPlan(false);
+    }
+  };
+
   if (loading) {
     return (
-      <div>
+      <PageShell>
         <div className="skeleton h-8 w-1/3 rounded-xl mb-6" />
-        <div className="card p-6 space-y-4">
+        <Panel className="space-y-4 p-6">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="skeleton h-11 rounded-xl" />
           ))}
-        </div>
-      </div>
+        </Panel>
+      </PageShell>
     );
   }
 
@@ -711,56 +447,215 @@ export default function ProfilePage() {
       setSchoolForm((prev) => ({ ...prev, [key]: value }));
     };
 
-    const handleSchoolSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!schoolForm.schoolName.trim() || !schoolForm.city || !schoolForm.board) {
-        toast.error("Please fill in all required fields");
-        return;
-      }
+    const schoolSections = getSchoolProfileSections(schoolForm);
+    const activeSchoolSectionMeta = schoolSections.find((section) => section.id === schoolActiveSection) || schoolSections[0];
 
+    const saveSchoolPatch = async (patch: Record<string, any>, successMessage: string) => {
       setSchoolSaving(true);
 
       try {
-        const res = await fetch("/api/profile", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const data = await updateProfile(patch);
+        setProfileData(data);
+        setSchoolForm((prev) => ({
+          ...prev,
+          name: data.name || prev.name,
+          schoolName: data.schoolName || prev.schoolName,
+          city: data.city || prev.city,
+          board: data.board || prev.board,
+          address: data.address || "",
+          website: data.website || "",
+          about: data.about || "",
+          hasPfEsi: !!data.hasPfEsi,
+          paymentTrackRecord: data.paymentTrackRecord || "",
+          workingHours: data.workingHours || "",
+          udiseCode: data.udiseCode || "",
+        }));
+        toast.success(successMessage);
+      } catch (error) {
+        if (error instanceof ApiRequestError) {
+          toast.error(
+            getApiFieldError(error, "schoolName") ||
+              getApiErrorMessage(error, "Failed to save")
+          );
+        } else {
+          toast.error(getApiErrorMessage(error, "Failed to save"));
+        }
+      } finally {
+        setSchoolSaving(false);
+      }
+    };
+
+    const handleSchoolSectionSave = async () => {
+      if (schoolActiveSection === "school-information") {
+        if (!schoolForm.schoolName.trim() || !schoolForm.city || !schoolForm.board) {
+          toast.error("School name, city, and board are required in this section.");
+          return;
+        }
+        await saveSchoolPatch(
+          {
+            name: schoolForm.name,
             schoolName: schoolForm.schoolName,
             city: schoolForm.city,
             board: schoolForm.board,
             address: schoolForm.address || undefined,
             website: schoolForm.website || undefined,
             about: schoolForm.about || undefined,
-          }),
-        });
+          },
+          "School Information saved"
+        );
+        return;
+      }
 
-        const data = await res.json();
-        if (data.success) {
-          setProfileData(data.data);
-          toast.success("School profile saved");
-        } else {
-          toast.error(data.error?.schoolName?.[0] || data.error || "Failed to save");
-        }
-      } catch {
-        toast.error("Network error");
+      await saveSchoolPatch(
+        {
+          hasPfEsi: schoolForm.hasPfEsi,
+          paymentTrackRecord: schoolForm.paymentTrackRecord || undefined,
+          workingHours: schoolForm.workingHours || undefined,
+          udiseCode: schoolForm.udiseCode || undefined,
+        },
+        "Trust & Compliance saved"
+      );
+    };
+
+    const verificationStatus =
+      profileData?.verificationStatus || (profileData?.verified ? "VERIFIED" : "UNVERIFIED");
+
+    const handleSchoolLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      setLogoUploading(true);
+      try {
+        const data = await uploadSchoolLogo(file);
+        setProfileData((prev) => (prev ? { ...prev, logoUrl: data.logoUrl } : prev));
+        toast.success("School logo updated");
+      } catch (error) {
+        toast.error(getApiErrorMessage(error, "Failed to upload school logo"));
       } finally {
-        setSchoolSaving(false);
+        setLogoUploading(false);
+        if (schoolLogoInputRef.current) schoolLogoInputRef.current.value = "";
+      }
+    };
+
+    const submitVerificationRequest = async () => {
+      setRequestingVerification(true);
+      try {
+        const data = await requestSchoolVerification();
+        setProfileData((prev) => (
+          prev
+            ? {
+                ...prev,
+                verificationStatus: data.verificationStatus,
+                verified: data.verified,
+              }
+            : prev
+        ));
+        toast.success("Verification request submitted");
+      } catch (error) {
+        toast.error(getApiErrorMessage(error, "Failed to request verification"));
+      } finally {
+        setRequestingVerification(false);
       }
     };
 
     return (
-      <div>
-        <div className="mb-6">
-          <h1 className="font-display text-[26px] font-bold text-gray-900 tracking-[-0.02em]">
-            School Profile
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Update your school's information for job listings
-          </p>
+      <PageShell>
+        <PageHeader
+          title="School Profile"
+          subtitle="Update your school's information for job listings."
+        />
+
+        <Panel className="mb-5 p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 font-display">{schoolForm.schoolName || "School profile"}</h2>
+              <p className="mt-1 text-xs text-gray-500">
+                {verificationStatus === "VERIFIED"
+                  ? "Verified school profile"
+                  : verificationStatus === "PENDING"
+                    ? "Verification under review"
+                    : "Unverified school profile"}
+              </p>
+            </div>
+            <StatusBadge tone={verificationStatus === "VERIFIED" ? "success" : verificationStatus === "PENDING" ? "neutral" : "warning"}>
+              {verificationStatus === "VERIFIED" ? "Verified" : verificationStatus === "PENDING" ? "Pending" : "Unverified"}
+            </StatusBadge>
+          </div>
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-500">Profile completion</span>
+              <span className="text-xs font-bold text-brand-600">{schoolCompletion}%</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+              <div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${schoolCompletion}%` }} />
+            </div>
+          </div>
+        </Panel>
+
+        <Panel className="mb-5 p-5">
+          {verificationStatus === "VERIFIED" ? (
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-emerald-700 text-sm font-medium">
+              Verified School ✓ Your profile has passed verification.
+            </div>
+          ) : verificationStatus === "PENDING" ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-slate-700 text-sm font-medium">
+              Verification under review (2-3 business days).
+            </div>
+          ) : (
+            <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-medium text-amber-800">
+                Complete your profile to apply for verification.
+              </p>
+              <button
+                type="button"
+                onClick={submitVerificationRequest}
+                disabled={requestingVerification}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+              >
+                {requestingVerification ? <Loader2 size={12} className="animate-spin" /> : null}
+                Submit for review
+              </button>
+            </div>
+          )}
+        </Panel>
+
+        <div className="mb-6 overflow-x-auto">
+          <div className="inline-flex min-w-full gap-2 rounded-2xl border border-[var(--eh-border)] bg-white p-2">
+            {schoolSections.map((section) => (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => setSchoolActiveSection(section.id)}
+                className={cn(
+                  "rounded-xl px-4 py-2 text-[12px] font-semibold transition-colors whitespace-nowrap",
+                  schoolActiveSection === section.id
+                    ? "bg-brand-500 text-white shadow-brand"
+                    : section.done
+                      ? "bg-brand-50 text-brand-700"
+                      : "text-[var(--eh-text-2)] hover:bg-[var(--surface-base)]"
+                )}
+              >
+                {section.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <form onSubmit={handleSchoolSubmit} className="space-y-5">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSchoolSectionSave();
+          }}
+          className="space-y-5"
+        >
+          <div className="rounded-2xl border border-[var(--eh-border)] bg-[var(--surface-base)] px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">Current section</p>
+            <h2 className="mt-1 text-[18px] font-semibold text-[var(--eh-text)]">{activeSchoolSectionMeta.label}</h2>
+            <p className="mt-1 text-[13px] text-[var(--eh-text-3)]">{activeSchoolSectionMeta.description}</p>
+          </div>
+
           {/* Basic Info */}
+          {schoolActiveSection === "school-information" && (
           <div className="card p-6">
             <div className="flex items-center gap-2 pb-3 mb-4 border-b border-black/[0.05]">
               <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
@@ -770,6 +665,50 @@ export default function ProfilePage() {
             </div>
 
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">School Logo</label>
+                <input
+                  ref={schoolLogoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={handleSchoolLogoUpload}
+                  disabled={logoUploading}
+                />
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center text-xs text-gray-400">
+                    {profileData?.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={profileData.logoUrl} alt="School logo" className="h-full w-full object-cover" />
+                    ) : (
+                      "No logo"
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => schoolLogoInputRef.current?.click()}
+                    disabled={logoUploading}
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    {logoUploading ? <Loader2 size={12} className="animate-spin" /> : null}
+                    {profileData?.logoUrl ? "Replace logo" : "Upload logo"}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Account Name
+                </label>
+                <input
+                  type="text"
+                  value={schoolForm.name}
+                  onChange={(e) => handleSchoolChange("name", e.target.value)}
+                  className="input-base"
+                  placeholder="Your name"
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">
                   School Name *
@@ -863,59 +802,167 @@ export default function ProfilePage() {
                 />
                 <p className="text-xs text-gray-400 mt-1">{schoolForm.about.length}/2000</p>
               </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => void handleSchoolSectionSave()}
+                  disabled={schoolSaving}
+                  className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-brand transition-colors hover:bg-brand-600 disabled:opacity-60"
+                >
+                  {schoolSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  Save School Information
+                </button>
+              </div>
             </div>
           </div>
+          )}
 
-          {/* Submit Button */}
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={schoolSaving}
-              className="flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white rounded-xl font-semibold text-sm hover:bg-brand-700 disabled:opacity-50 transition-colors"
-            >
-              {schoolSaving ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Saving…
-                </>
-              ) : (
-                <>
-                  <Save size={16} />
-                  Save Changes
-                </>
-              )}
-            </button>
+          {schoolActiveSection === "trust-compliance" && (
+          <div className="card p-6">
+            <div className="flex items-center gap-2 pb-3 mb-4 border-b border-black/[0.05]">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-[0.07em]">
+                Trust & Compliance
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">UDISE Code</label>
+                <input
+                  type="text"
+                  value={schoolForm.udiseCode}
+                  onChange={(e) => handleSchoolChange("udiseCode", e.target.value)}
+                  className="input-base"
+                  placeholder="Enter your UDISE code"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Payment track record</label>
+                <select
+                  value={schoolForm.paymentTrackRecord}
+                  onChange={(e) => handleSchoolChange("paymentTrackRecord", e.target.value)}
+                  className="input-base appearance-none"
+                >
+                  <option value="">Select payment history</option>
+                  <option value="ON_TIME">Pays on time</option>
+                  <option value="DELAYED">Sometimes delayed</option>
+                  <option value="MIXED">Mixed record</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Working hours</label>
+                <input
+                  type="text"
+                  value={schoolForm.workingHours}
+                  onChange={(e) => handleSchoolChange("workingHours", e.target.value)}
+                  className="input-base"
+                  placeholder="e.g. 8am-4pm, Mon-Sat"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={schoolForm.hasPfEsi}
+                  onChange={(e) => handleSchoolChange("hasPfEsi", e.target.checked)}
+                  className="rounded"
+                  id="school-has-pf-esi"
+                />
+                <label htmlFor="school-has-pf-esi" className="text-sm font-medium text-gray-700">
+                  PF/ESI provided
+                </label>
+              </div>
+
+              <div className="sm:col-span-2 flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => void handleSchoolSectionSave()}
+                  disabled={schoolSaving}
+                  className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-brand transition-colors hover:bg-brand-600 disabled:opacity-60"
+                >
+                  {schoolSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  Save Trust & Compliance
+                </button>
+              </div>
+            </div>
           </div>
+          )}
         </form>
-      </div>
+      </PageShell>
     );
   }
 
   // Teacher profile
+  const watchedProfile = form.watch();
+  const profileSections = getTeacherProfileSections(watchedProfile, profileData);
+  const completedSections = profileSections.filter((section) => section.done).length;
+  const activeSectionMeta = profileSections.find((section) => section.id === activeSection) || profileSections[0];
+  const teacherVerificationStatus = ((profileData as any)?.verificationStatus ||
+    ((profileData as any)?.safetyBadgeGranted ? "VERIFIED" : "UNVERIFIED")) as
+    | "UNVERIFIED"
+    | "PENDING"
+    | "VERIFIED"
+    | "REJECTED";
+
+  const submitTeacherVerificationRequest = async () => {
+    setRequestingVerification(true);
+    try {
+      const data = await requestSchoolVerification();
+      setProfileData((prev) => (prev ? { ...prev, ...(data as Record<string, unknown>) } : prev));
+      toast.success("Teacher verification request submitted");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to request verification"));
+    } finally {
+      setRequestingVerification(false);
+    }
+  };
+
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="font-display text-[26px] font-bold text-gray-900 tracking-[-0.02em]">
-          My Profile
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Keep your profile current to attract the right opportunities
-        </p>
+    <PageShell>
+      <PageHeader
+        title="My Profile"
+        subtitle="Keep your profile current to attract the right opportunities."
+      />
+
+      <div className="mb-6 overflow-x-auto">
+        <div className="inline-flex min-w-full gap-2 rounded-2xl border border-[var(--eh-border)] bg-white p-2">
+          {profileSections.map((section) => (
+            <button
+              key={section.id}
+              type="button"
+              onClick={() => setActiveSection(section.id)}
+              className={cn(
+                "rounded-xl px-4 py-2 text-[12px] font-semibold transition-colors whitespace-nowrap",
+                activeSection === section.id
+                  ? "bg-brand-500 text-white shadow-brand"
+                  : section.done
+                    ? "bg-brand-50 text-brand-700"
+                    : "text-[var(--eh-text-2)] hover:bg-[var(--surface-base)]"
+              )}
+            >
+              {section.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Header with avatar and completion */}
       {profileData && (
-        <ProfileHeaderCard
+        <SharedProfileHeaderCard
           avatarUrl={profileData.avatarUrl}
           name={profileData.name}
-          availabilityStatus={profileData.availabilityStatus}
+          availabilityStatus={profileData.availabilityStatus || "NOT_LOOKING"}
           completion={completion}
           onAvatarChange={handleAvatarChange}
         />
       )}
 
       {/* Modals */}
-      <ExperienceModal
+      <ExtractedExperienceModal
         open={experienceModalOpen}
         editingEntry={editingExperience}
         onClose={() => {
@@ -925,7 +972,7 @@ export default function ProfilePage() {
         onSaved={handleExperienceAdded}
       />
 
-      <CertificationModal
+      <ExtractedCertificationModal
         open={certificationModalOpen}
         editingEntry={editingCertification}
         onClose={() => {
@@ -936,380 +983,208 @@ export default function ProfilePage() {
       />
 
       {/* Main form */}
-      <form onSubmit={form.handleSubmit(handleProfileSave)} className="space-y-5">
-        {/* Basic Info Card */}
-        <div className="card p-6">
-          <div className="flex items-center gap-2 pb-3 mb-4 border-b border-black/[0.05]">
-            <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-[0.07em]">Basic Information</h2>
-          </div>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleActiveSectionSave();
+        }}
+        className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]"
+      >
+        <div className="space-y-5">
+        <Panel className="bg-[var(--surface-base)] px-4 py-3 shadow-none">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">Current section</p>
+          <h2 className="mt-1 text-[18px] font-semibold text-[var(--eh-text)]">{activeSectionMeta.label}</h2>
+          <p className="mt-1 text-[13px] text-[var(--eh-text-3)]">{activeSectionMeta.description}</p>
+        </Panel>
 
+        {activeSection === "basic-info" && (
+          <TeacherBasicInfoSection
+            form={form}
+            saving={saving}
+            onSave={handleActiveSectionSave}
+            phoneValidationError={phoneValidationError}
+            onPhoneBlur={handlePhoneBlur}
+          />
+        )}
+
+        {activeSection === "specialisations" && (
+          <TeacherSpecialisationsSection
+            form={form}
+            saving={saving}
+            onSave={handleActiveSectionSave}
+          />
+        )}
+
+        {activeSection === "experience" && (
+          <TeacherExperienceSection
+            experiences={profileData?.experiences}
+            onAdd={openExperienceCreateModal}
+            onEdit={openExperienceEditModal}
+            onDelete={deleteExperience}
+          />
+        )}
+
+        {activeSection === "certifications" && (
+          <TeacherCertificationsSection
+            certifications={profileData?.certifications}
+            onAdd={openCertificationCreateModal}
+            onEdit={openCertificationEditModal}
+            onDelete={deleteCertification}
+          />
+        )}
+
+        {activeSection === "teaching-credentials" && (
+          <TeacherCredentialsSection
+            form={form}
+            saving={saving}
+            onSave={handleActiveSectionSave}
+            profileData={profileData}
+            uploadingDemoVideo={uploadingDemoVideo}
+            uploadingLessonPlan={uploadingLessonPlan}
+            onDemoVideoSelect={handleDemoVideoSelect}
+            onLessonPlanSelect={handleLessonPlanSelect}
+          />
+        )}
+
+        {activeSection === "resume" && (
+          <TeacherResumeSection
+            resumes={profileData?.resumes}
+            onUploadComplete={refreshProfileData}
+            onDeleteResume={deleteResume}
+          />
+        )}
+
+        </div>
+
+        <aside className="self-start xl:sticky xl:top-24">
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Qualification</label>
-              <input
-                type="text"
-                {...form.register("qualification")}
-                placeholder="e.g. M.Sc Mathematics with B.Ed"
-                className="input-base"
-              />
-              {form.formState.errors.qualification && (
-                <p className="text-xs text-red-600 mt-1">{form.formState.errors.qualification.message}</p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Experience</label>
-                <select {...form.register("experience")} className="input-base appearance-none">
-                  <option value="">Select level</option>
-                  {EXPERIENCE_LEVELS.map((e) => (
-                    <option key={e} value={e}>
-                      {e}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">City</label>
-                <select {...form.register("city")} className="input-base appearance-none">
-                  <option value="">Select city</option>
-                  {LOCATIONS.map((l) => (
-                    <option key={l} value={l}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Current / Previous School</label>
-              <input
-                type="text"
-                {...form.register("currentSchool")}
-                placeholder="Where do you teach/taught?"
-                className="input-base"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Phone</label>
-                <input type="tel" {...form.register("phone")} placeholder="+91 XXXXX XXXXX" className="input-base" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Expected Salary (₹/month)</label>
-                <input
-                  type="number"
-                  {...form.register("expectedSalary")}
-                  placeholder="e.g. 45000"
-                  className="input-base"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Availability</label>
-              <select {...form.register("availabilityStatus")} className="input-base appearance-none">
-                <option value="ACTIVELY_LOOKING">Actively looking</option>
-                <option value="OPEN_TO_OFFERS">Open to offers</option>
-                <option value="NOT_LOOKING">Not looking</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Bio</label>
-              <textarea
-                {...form.register("bio")}
-                placeholder="Tell schools about yourself..."
-                className="input-base min-h-[100px] resize-vertical"
-              />
-              {form.formState.errors.bio && (
-                <p className="text-xs text-red-600 mt-1">{form.formState.errors.bio.message}</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Teaching Specializations */}
-        <div className="card p-6">
-          <div className="flex items-center gap-2 pb-3 mb-4 border-b border-black/[0.05]">
-            <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-[0.07em]">Teaching Specialisations</h2>
-          </div>
-
-          <div className="space-y-5">
-            <Controller
-              control={form.control}
-              name="subjects"
-              render={({ field }) => (
-                <ChipGroup
-                  label="Subjects you teach"
-                  options={SUBJECTS}
-                  selected={field.value || []}
-                  onChange={field.onChange}
-                />
-              )}
-            />
-
-            <Controller
-              control={form.control}
-              name="preferredBoards"
-              render={({ field }) => (
-                <ChipGroup
-                  label="Preferred boards"
-                  options={BOARDS}
-                  selected={field.value || []}
-                  onChange={field.onChange}
-                />
-              )}
-            />
-
-            <Controller
-              control={form.control}
-              name="preferredGrades"
-              render={({ field }) => (
-                <ChipGroup
-                  label="Preferred grade levels"
-                  options={GRADE_LEVELS}
-                  selected={field.value || []}
-                  onChange={field.onChange}
-                />
-              )}
-            />
-          </div>
-        </div>
-
-        {/* Work Experience */}
-        <div className="card p-6">
-          <div className="flex items-center justify-between gap-2 pb-3 mb-4 border-b border-black/[0.05]">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-[0.07em]">Work Experience</h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setEditingExperience(null);
-                setExperienceModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors"
-            >
-              <Plus size={12} /> Add
-            </button>
-          </div>
-
-          {profileData?.experiences && profileData.experiences.length > 0 ? (
-            <div className="space-y-3">
-              {profileData.experiences.map((exp: any) => (
-                <div key={exp.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div>
-                      <h3 className="text-sm font-semibold text-gray-900">{exp.role}</h3>
-                      <p className="text-xs text-gray-500">{exp.schoolName}</p>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingExperience(exp);
-                          setExperienceModalOpen(true);
-                        }}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-white transition-colors"
-                      >
-                        <Edit2 size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const res = await fetch(`/api/profile/experience/${exp.id}`, { method: "DELETE" });
-                          if (res.ok) {
-                            handleExperienceDeleted(exp.id);
-                            toast.success("Experience deleted");
-                          }
-                        }}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    {new Date(exp.startDate).toLocaleDateString("en-IN", { month: "short", year: "numeric" })} –{" "}
-                    {exp.isCurrent ? "Present" : new Date(exp.endDate).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}
-                  </p>
+            <Panel className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-3)]">Profile plan</p>
+                  <h2 className="mt-1 text-[15px] font-semibold text-[var(--eh-text)]">Complete the profile in order</h2>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500 italic py-4">No work experience added yet</p>
-          )}
-        </div>
+                <span className="rounded-full bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-700">
+                  {completedSections}/{profileSections.length}
+                </span>
+              </div>
+              <div className="mt-3 space-y-2">
+                {profileSections.map((section, index) => (
+                  <button
+                    key={section.id}
+                    type="button"
+                    onClick={() => setActiveSection(section.id)}
+                    className="flex w-full items-start gap-3 rounded-xl border border-[var(--eh-border)] px-3 py-3 text-left transition-colors hover:bg-[var(--surface-base)]"
+                  >
+                    <span className={cn(
+                      "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                      section.done ? "bg-brand-500 text-white" : "bg-[var(--surface-base)] text-[var(--eh-text-3)]"
+                    )}>
+                      {section.done ? "✓" : index + 1}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-semibold text-[var(--eh-text)]">{section.label}</span>
+                      <span className="mt-0.5 block text-[12px] leading-relaxed text-[var(--eh-text-3)]">{section.description}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </Panel>
 
-        {/* Certifications */}
-        <div className="card p-6">
-          <div className="flex items-center justify-between gap-2 pb-3 mb-4 border-b border-black/[0.05]">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-[0.07em]">Certifications</h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setEditingCertification(null);
-                setCertificationModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors"
-            >
-              <Plus size={12} /> Add
-            </button>
-          </div>
-
-          {profileData?.certifications && profileData.certifications.length > 0 ? (
-            <div className="space-y-2">
-              {profileData.certifications.map((cert: any) => (
-                <div key={cert.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-100 group">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{cert.name}</p>
-                    <p className="text-xs text-gray-500">{cert.issuedBy}</p>
-                  </div>
-                  <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingCertification(cert);
-                        setCertificationModalOpen(true);
-                      }}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-white transition-colors"
-                    >
-                      <Edit2 size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const res = await fetch(`/api/profile/certifications/${cert.id}`, { method: "DELETE" });
-                        if (res.ok) {
-                          handleCertificationDeleted(cert.id);
-                          toast.success("Certification deleted");
-                        }
-                      }}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+            <Panel className="p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[15px] font-semibold text-[var(--eh-text)]">Readiness</h2>
+                <span className="text-[13px] font-semibold text-brand-600">{completion}%</span>
+              </div>
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--surface-base)]">
+                <div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${completion}%` }} />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] text-[var(--eh-text-3)]">
+                <div className="rounded-lg bg-[var(--surface-base)] px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-[0.06em] text-[var(--eh-text-4)]">Experience</p>
+                  <p className="mt-1 font-medium text-[var(--eh-text-2)]">{profileData?.experiences?.length || 0} entries</p>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500 italic py-4">No certifications added yet</p>
-          )}
-        </div>
+                <div className="rounded-lg bg-[var(--surface-base)] px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-[0.06em] text-[var(--eh-text-4)]">Resume</p>
+                  <p className="mt-1 font-medium text-[var(--eh-text-2)]">{profileData?.resumes?.length ? "Uploaded" : "Missing"}</p>
+                </div>
+              </div>
+              <p className="mt-3 text-[12px] leading-relaxed text-[var(--eh-text-3)]">
+                Schools respond faster when your bio, specialisations, and resume are all complete.
+              </p>
+            </Panel>
 
-        {/* Resume Section */}
-        <div className="card p-6">
-          <div className="flex items-center gap-2 pb-3 mb-4 border-b border-black/[0.05]">
-            <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-[0.07em]">Resume</h2>
-          </div>
+            <Panel className="p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[15px] font-semibold text-[var(--eh-text)]">Verification</h2>
+                <StatusBadge tone={teacherVerificationStatus === "VERIFIED" ? "success" : teacherVerificationStatus === "PENDING" ? "neutral" : teacherVerificationStatus === "REJECTED" ? "danger" : "warning"}>
+                  {teacherVerificationStatus === "VERIFIED"
+                    ? "Verified"
+                    : teacherVerificationStatus === "PENDING"
+                      ? "Pending"
+                      : teacherVerificationStatus === "REJECTED"
+                        ? "Rejected"
+                        : "Unverified"}
+                </StatusBadge>
+              </div>
+              <p className="mt-3 text-[12px] leading-relaxed text-[var(--eh-text-3)]">
+                Verified teachers are easier for schools to trust. Submit once your demo video, lesson plan, and declarations are complete.
+              </p>
+              <button
+                type="button"
+                onClick={() => void submitTeacherVerificationRequest()}
+                disabled={requestingVerification || teacherVerificationStatus === "PENDING" || teacherVerificationStatus === "VERIFIED"}
+                className="mt-3 w-full rounded-xl border border-[var(--eh-border)] px-4 py-2.5 text-sm font-semibold text-[var(--eh-text-2)] transition-colors hover:bg-[var(--surface-base)] disabled:opacity-50"
+              >
+                {requestingVerification
+                  ? "Submitting..."
+                  : teacherVerificationStatus === "VERIFIED"
+                    ? "Already verified"
+                    : teacherVerificationStatus === "PENDING"
+                      ? "Verification in review"
+                      : "Request teacher verification"}
+              </button>
+            </Panel>
 
-          <div className="mb-4">
-            <FileUpload
-              onUpload={async (_, fileName) => {
-                // Auto-delete oldest resume if multiple exist
-                if (profileData?.resumes && profileData.resumes.length > 0) {
-                  const oldest = profileData.resumes.reduce((prev: any, current: any) =>
-                    new Date(prev.uploadedAt) < new Date(current.uploadedAt) ? prev : current
-                  );
-
-                  const deleteRes = await fetch(`/api/resumes/${oldest.id}`, { method: "DELETE" });
-                  if (deleteRes.ok) {
-                    toast.success(`Old resume "${oldest.fileName}" deleted automatically`);
-                  }
-                }
-
-                // Refresh profile to get new resume
-                fetch("/api/profile")
-                  .then((r) => r.json())
-                  .then((data) => {
-                    if (data.success) {
-                      setProfileData(data.data);
+            <Panel className="p-4">
+              <h2 className="text-[15px] font-semibold text-[var(--eh-text)]">Actions</h2>
+              <div className="mt-3 space-y-2">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-6 py-2.5 text-sm font-semibold text-white shadow-brand transition-all duration-[120ms] hover:-translate-y-px hover:bg-brand-600 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={14} /> Save This Section
+                    </>
+                  )}
+                </button>
+                <p className="text-[12px] leading-relaxed text-[var(--eh-text-3)]">
+                  Only the fields in <span className="font-semibold text-[var(--eh-text-2)]">{activeSectionMeta.label}</span> are validated and saved here.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentIndex = profileSections.findIndex((section) => section.id === activeSection);
+                    if (currentIndex < profileSections.length - 1) {
+                      setActiveSection(profileSections[currentIndex + 1].id);
                     }
-                  });
-              }}
-              onClear={() => {
-                // No active resume preview state to clear here.
-              }}
-            />
+                  }}
+                  className="w-full rounded-xl border border-[var(--eh-border)] px-4 py-2.5 text-sm font-semibold text-[var(--eh-text-2)] transition-colors hover:bg-[var(--surface-base)]"
+                >
+                  Next section
+                </button>
+              </div>
+            </Panel>
           </div>
+        </aside>
 
-          {profileData?.resumes && profileData.resumes.length > 0 && (
-            <div className="space-y-2">
-              {profileData.resumes.length > 1 && (
-                <div className="p-3 rounded-lg bg-amber-50 border border-amber-100">
-                  <p className="text-xs font-medium text-amber-700">
-                    💡 You have {profileData.resumes.length} resumes. Uploading a new one will delete the oldest.
-                  </p>
-                </div>
-              )}
-              {profileData.resumes.map((resume: any) => (
-                <div key={resume.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-100 group">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{resume.fileName}</p>
-                    <p className="text-xs text-gray-500">Uploaded {new Date(resume.uploadedAt).toLocaleDateString()}</p>
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    <a
-                      href={resume.fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-brand-600 hover:bg-brand-50 transition-colors"
-                    >
-                      Download
-                    </a>
-                    <button
-                      onClick={async () => {
-                        const res = await fetch(`/api/resumes/${resume.id}`, { method: "DELETE" });
-                        if (res.ok) {
-                          handleResumeDeleted(resume.id);
-                          toast.success("Resume deleted");
-                        } else {
-                          toast.error("Failed to delete resume");
-                        }
-                      }}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Save Button */}
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={saving}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600 transition-all duration-[120ms] shadow-brand hover:-translate-y-px active:translate-y-0 disabled:opacity-50 disabled:pointer-events-none"
-          >
-            {saving ? (
-              <>
-                <Loader2 size={14} className="animate-spin" /> Saving…
-              </>
-            ) : (
-              <>
-                <Save size={14} /> Save Profile
-              </>
-            )}
-          </button>
-        </div>
       </form>
-    </div>
+    </PageShell>
   );
 }

@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
@@ -15,7 +15,18 @@
     "db:seed:schools": "tsx db-scripts/seed-schools.ts",
     "db:seed:phase4": "tsx scripts/seed-phase4.ts",
     "db:reseed:demo": "tsx scripts/reseed-demo-data.ts",
-    "db:generate": "prisma generate"
+    "db:seed:smoke": "tsx scripts/seed-smoke-data.ts",
+    "db:generate": "prisma generate",
+    "queues:process": "tsx scripts/process-platform-queues.ts",
+    "test:auth-branching": "tsx scripts/test-auth-role-branching.ts",
+    "test:school-workflow": "tsx scripts/test-school-workflow.ts",
+    "test:teacher-workflow": "tsx scripts/test-teacher-workflow.ts",
+    "test:domain-modules": "tsx scripts/test-domain-modules.ts",
+    "test:admin-workflow": "tsx scripts/test-admin-workflow.ts",
+    "test:production-hardening": "tsx scripts/test-production-hardening-smoke.ts",
+    "test:api-authz": "tsx scripts/test-api-authorization.ts",
+    "test:visual-audit": "tsx scripts/test-visual-audit.ts",
+    "test:smoke": "tsx scripts/test-smoke-all.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

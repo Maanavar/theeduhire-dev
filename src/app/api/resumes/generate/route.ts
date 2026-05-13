@@ -8,6 +8,8 @@ import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase";
 import { z } from "zod";
 import puppeteer from "puppeteer";
+import { createStorageObjectRef, ensureBucket, getResumeAccessPath } from "@/lib/storage";
+import { RESUME_BUCKET } from "@/config/constants";
 
 // Helper to send progress updates
 function sendProgress(encoder: TextEncoder, writer: WritableStreamDefaultWriter, progress: number, message: string) {
@@ -302,8 +304,9 @@ export async function POST(req: NextRequest) {
       const storagePath = `${auth.user.id}/${fileName}`;
 
       await sendProgress(encoder, writer, 75, "Finalizing upload...");
+      await ensureBucket(RESUME_BUCKET, "private", "5MB");
       const { error: uploadError } = await supabaseAdmin.storage
-        .from("Resumes")
+        .from(RESUME_BUCKET)
         .upload(storagePath, pdfBuffer, {
           contentType: "application/pdf",
           upsert: false,
@@ -316,16 +319,12 @@ export async function POST(req: NextRequest) {
         return;
       }
 
-      const { data: urlData } = supabaseAdmin.storage
-        .from("Resumes")
-        .getPublicUrl(storagePath);
-
       // Step 5: Save to database (90-100%)
       await sendProgress(encoder, writer, 85, "Saving to database...");
       const resume = await prisma.resume.create({
         data: {
           userId: auth.user.id,
-          fileUrl: urlData.publicUrl,
+          fileUrl: createStorageObjectRef(RESUME_BUCKET, storagePath),
           fileName: `Resume-${parsed.data.template}.pdf`,
           fileSize: pdfBuffer.length,
           isGenerated: true,
@@ -349,7 +348,7 @@ export async function POST(req: NextRequest) {
         success: true,
         result: {
           id: resume.id,
-          fileUrl: resume.fileUrl,
+          fileUrl: getResumeAccessPath(resume.id),
           fileName: resume.fileName,
           isGenerated: true,
           template: parsed.data.template,
@@ -366,19 +365,19 @@ export async function POST(req: NextRequest) {
       console.error("POST /api/resumes/generate error:", error);
       try {
         await sendProgress(encoder, writer, 0, "Error generating resume");
-      } catch (e) {
+      } catch {
         // Writer might already be closed
       }
       try {
         await writer.close();
-      } catch (e) {
+      } catch {
         // Already closed
       }
     } finally {
       if (browser) {
         try {
           await browser.close();
-        } catch (e) {
+        } catch {
           // Already closed
         }
       }

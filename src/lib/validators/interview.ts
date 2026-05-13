@@ -7,6 +7,7 @@ export const scheduleInterviewSchema = z.object({
   type: z.enum(["VIDEO", "PHONE", "IN_PERSON"]),
   meetingLink: z.string().url().optional().or(z.literal("")),
   location: z.string().max(200).optional(),
+  schoolNotes: z.string().max(1000).optional(),
 });
 
 export type ScheduleInterviewInput = z.infer<typeof scheduleInterviewSchema>;

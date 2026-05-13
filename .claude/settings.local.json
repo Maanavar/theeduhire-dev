@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"c:/Users/senth/OneDrive/文档/GitHub/\")",
+      "Read(//c/Users/senth/OneDrive/文档/GitHub/**)",
+      "PowerShell(ls -r -Filter 'route.ts' src/app/api)",
+      "PowerShell(grep -i apply)",
+      "Bash(awk '{print $NF}')",
+      "PowerShell(Set-Location \"c:\\\\Users\\\\senth\\\\OneDrive\\\\문서\\\\GitHub\\\\theeduhire-dev\"; $files = @\\(\".codex_tmp_EduHire-print.html\", \"CODING_AGENT_INSTRUCTION_PACK.md\", \"EDUHIRE_DESIGN_README_SPEC.md\", \"EDUHIRE_HYBRID_BACKLOG.csv\", \"EDUHIRE_HYBRID_IMPLEMENTATION_PLAN.md\", \"HYBRID_UPGRADE_PLAN.md\"\\); foreach \\($f in $files\\) { if \\(Test-Path $f\\) { Remove-Item $f -Force; Write-Host \"Deleted: $f\" } else { Write-Host \"Not found: $f\" } })",
+      "Bash(npx prisma *)",
+      "Bash(npx tsx -e ' *)",
+      "Bash(node -e ' *)",
+      "Bash(Select-String -Pattern \"deploy|build|start\" -SimpleMatch)",
+      "Bash(npx vercel *)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\senth\\\\OneDrive\\\\文档\\\\GitHub\\\\theeduhire-dev\\\\src\\\\app\\\\\\(public\\)\" -Recurse -Force | Sort-Object FullName | ForEach-Object { $_.FullName -replace [regex]::Escape\\(\"c:\\\\Users\\\\senth\\\\OneDrive\\\\文档\\\\GitHub\\\\theeduhire-dev\\\\\"\\), \"\" })",
+      "Bash(dir src\\\\app)",
+      "Bash(Remove-Item \"c:\\\\Users\\\\senth\\\\OneDrive\\\\문서\\\\GitHub\\\\theeduhire-dev\\\\src\\\\app\\\\\\(public\\)\\\\contact\\\\page.tsx\" -Force)"
+    ]
+  }
+}

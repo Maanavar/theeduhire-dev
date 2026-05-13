@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
+import { canManageJob } from "@/lib/policies/job-policy";
+import { getSchoolProfileIdForUser } from "@/lib/policies/application-policy";
+import { getTeacherDocumentAccessPath } from "@/lib/storage";
 
 export async function GET(
   req: NextRequest,
@@ -17,19 +20,29 @@ export async function GET(
     // Verify the job belongs to this school admin
     const job = await prisma.jobPosting.findUnique({
       where: { id: jobId },
-      select: { postedBy: true },
+      select: { postedBy: true, schoolId: true },
     });
 
     if (!job) {
       return NextResponse.json({ success: false, error: "Job not found" }, { status: 404 });
     }
-    if (job.postedBy !== auth.user.id && auth.user.role !== "ADMIN") {
+    const schoolProfileId = auth.user.role === "SCHOOL_ADMIN"
+      ? await getSchoolProfileIdForUser(prisma, auth.user.id)
+      : null;
+    if (!canManageJob(auth.user, { postedBy: job.postedBy, schoolId: job.schoolId }, schoolProfileId)) {
       return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
     }
 
     const applications = await prisma.application.findMany({
       where: { jobId },
       include: {
+        screeningAnswers: {
+          include: {
+            question: {
+              select: { id: true, question: true, required: true, sortOrder: true },
+            },
+          },
+        },
         applicant: {
           select: {
             name: true,
@@ -41,6 +54,8 @@ export async function GET(
                 experience: true,
                 currentSchool: true,
                 city: true,
+                demoVideoUrl: true,
+                lessonPlanUrl: true,
               },
             },
           },
@@ -49,7 +64,26 @@ export async function GET(
       orderBy: { appliedAt: "desc" },
     });
 
-    return NextResponse.json({ success: true, data: applications });
+    return NextResponse.json({
+      success: true,
+      data: applications.map((application) => ({
+        ...application,
+        applicant: {
+          ...application.applicant,
+          teacherProfile: application.applicant.teacherProfile
+            ? {
+                ...application.applicant.teacherProfile,
+                demoVideoUrl: application.applicant.teacherProfile.demoVideoUrl
+                  ? getTeacherDocumentAccessPath("demo-video", application.applicantId)
+                  : null,
+                lessonPlanUrl: application.applicant.teacherProfile.lessonPlanUrl
+                  ? getTeacherDocumentAccessPath("lesson-plan", application.applicantId)
+                  : null,
+              }
+            : null,
+        },
+      })),
+    });
   } catch (error) {
     console.error("GET /api/jobs/[id]/applicants error:", error);
     return NextResponse.json({ success: false, error: "Failed to fetch applicants" }, { status: 500 });

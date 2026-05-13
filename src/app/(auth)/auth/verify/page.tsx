@@ -53,7 +53,7 @@ function VerifyContent() {
 
       {status === "success" && (
         <>
-          <CheckCircle2 size={36} className="mx-auto text-green-500 mb-4" />
+          <CheckCircle2 size={36} className="mx-auto text-[var(--eh-primary-500)] mb-4" />
           <h1 className="font-display text-[22px] font-bold mb-2">Email verified!</h1>
           <p className="text-[14px] text-gray-500 mb-6">{message}</p>
           <Link

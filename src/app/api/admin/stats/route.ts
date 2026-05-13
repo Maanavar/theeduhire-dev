@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const auth = await requireAuth(["ADMIN"]);
   if ("error" in auth) {
     return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const [
       totalUsers, totalTeachers, totalSchools,
       totalJobs, activeJobs, totalApplications,
-      recentUsers, recentJobs,
+      recentUsers, recentJobs, pendingTeacherVerifications, pendingSchoolVerifications,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { role: "TEACHER" } }),
@@ -22,6 +22,8 @@ export async function GET(req: NextRequest) {
       prisma.application.count(),
       prisma.user.count({ where: { createdAt: { gte: new Date(Date.now() - 7 * 86400000) } } }),
       prisma.jobPosting.count({ where: { postedAt: { gte: new Date(Date.now() - 7 * 86400000) } } }),
+      (prisma as any).teacherProfile.count({ where: { verificationStatus: "PENDING" } }),
+      (prisma as any).schoolProfile.count({ where: { verificationStatus: "PENDING" } }),
     ]);
 
     return NextResponse.json({
@@ -30,6 +32,7 @@ export async function GET(req: NextRequest) {
         users: { total: totalUsers, teachers: totalTeachers, schools: totalSchools, recentWeek: recentUsers },
         jobs: { total: totalJobs, active: activeJobs, recentWeek: recentJobs },
         applications: { total: totalApplications },
+        moderation: { pendingTeacherVerifications, pendingSchoolVerifications },
       },
     });
   } catch (error) {

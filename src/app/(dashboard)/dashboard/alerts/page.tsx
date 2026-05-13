@@ -1,27 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Bell, BellOff, Edit2, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import Modal from '@/components/ui/modal';
-import { AlertCircle, Trash2, Edit2, Bell } from 'lucide-react';
+import { PageHeader } from '@/components/layout/page-shell';
+import { EmptyState, LoadingState } from '@/components/system/system-states';
+import { getApiErrorMessage } from '@/lib/api/client';
+import { getAlerts, createAlert, updateAlert, deleteAlert as apiDeleteAlert } from '@/lib/api/alerts-client';
+import { getProfile, updateProfile } from '@/lib/api/profile-client';
 
-interface JobAlert {
-  id: string;
-  name: string;
-  subject?: string;
-  city?: string;
-  board?: string;
-  gradeLevel?: string;
-  jobType?: string;
-  salaryMin?: number;
-  salaryMax?: number;
-  frequency: string;
-  isActive: boolean;
-  createdAt: string;
-}
+import type { JobAlert } from '@/lib/api/alerts-client';
 
 const BOARDS = ['CBSE', 'ICSE', 'STATE_BOARD', 'IB', 'CAMBRIDGE', 'OTHER'];
 const JOB_TYPES = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'VISITING_FACULTY'];
@@ -34,9 +26,11 @@ const FREQUENCIES = [
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<JobAlert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savingWhatsApp, setSavingWhatsApp] = useState(false);
+  const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [whatsappOptin, setWhatsappOptin] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-
   const [formData, setFormData] = useState({
     name: '',
     subject: '',
@@ -49,125 +43,28 @@ export default function AlertsPage() {
     frequency: 'DAILY_DIGEST',
   });
 
-  // Fetch alerts
   useEffect(() => {
     fetchAlerts();
+    getProfile()
+      .then((data) => {
+        setWhatsappNumber(data.whatsappNumber || '');
+        setWhatsappOptin(!!data.whatsappOptin);
+      })
+      .catch(() => {});
   }, []);
 
   async function fetchAlerts() {
     try {
       setLoading(true);
-      const res = await fetch('/api/alerts');
-      const data = await res.json();
-      if (data.success) {
-        setAlerts(data.data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch alerts:', error);
+      const data = await getAlerts();
+      setAlerts(data);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Failed to fetch alerts'));
     } finally {
       setLoading(false);
     }
   }
 
-  // Save alert (create or update)
-  async function saveAlert() {
-    if (!formData.name.trim()) {
-      alert('Alert name is required');
-      return;
-    }
-
-    try {
-      const payload: any = {
-        name: formData.name,
-        frequency: formData.frequency,
-      };
-
-      // Only include optional fields if set
-      if (formData.subject) payload.subject = formData.subject;
-      if (formData.city) payload.city = formData.city;
-      if (formData.board) payload.board = formData.board;
-      if (formData.gradeLevel) payload.gradeLevel = formData.gradeLevel;
-      if (formData.jobType) payload.jobType = formData.jobType;
-      if (formData.salaryMin) payload.salaryMin = parseInt(formData.salaryMin);
-      if (formData.salaryMax) payload.salaryMax = parseInt(formData.salaryMax);
-
-      const url = editingId ? `/api/alerts/${editingId}` : '/api/alerts';
-      const method = editingId ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setIsOpen(false);
-        resetForm();
-        fetchAlerts();
-        alert(`✓ Alert ${editingId ? 'updated' : 'created'}!`);
-      } else {
-        alert(`Error: ${data.error}`);
-      }
-    } catch (error) {
-      alert('Failed to save alert');
-      console.error(error);
-    }
-  }
-
-  // Delete alert
-  async function deleteAlert(id: string) {
-    if (!confirm('Delete this alert?')) return;
-
-    try {
-      const res = await fetch(`/api/alerts/${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        fetchAlerts();
-        alert('Alert deleted');
-      }
-    } catch (error) {
-      alert('Failed to delete alert');
-      console.error(error);
-    }
-  }
-
-  // Toggle alert active status
-  async function toggleAlert(alert: JobAlert) {
-    try {
-      const res = await fetch(`/api/alerts/${alert.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !alert.isActive }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        fetchAlerts();
-      }
-    } catch (error) {
-      console.error('Failed to toggle alert:', error);
-    }
-  }
-
-  // Edit alert
-  function editAlert(alert: JobAlert) {
-    setFormData({
-      name: alert.name,
-      subject: alert.subject || '',
-      city: alert.city || '',
-      board: alert.board || '',
-      gradeLevel: alert.gradeLevel || '',
-      jobType: alert.jobType || '',
-      salaryMin: alert.salaryMin ? alert.salaryMin.toString() : '',
-      salaryMax: alert.salaryMax ? alert.salaryMax.toString() : '',
-      frequency: alert.frequency,
-    });
-    setEditingId(alert.id);
-    setIsOpen(true);
-  }
-
-  // Reset form
   function resetForm() {
     setFormData({
       name: '',
@@ -183,197 +80,200 @@ export default function AlertsPage() {
     setEditingId(null);
   }
 
-  const formContent = (
-    <div className="space-y-4">
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-          Alert Name *
-        </label>
-        <Input
-          id="name"
-          placeholder="e.g., Math jobs in Bangalore"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-        />
-      </div>
+  async function saveAlert() {
+    if (!formData.name.trim()) {
+      toast.error('Alert name is required');
+      return;
+    }
 
-      <div>
-        <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1">
-          Subject
-        </label>
-        <Input
-          id="subject"
-          placeholder="e.g., Mathematics, English"
-          value={formData.subject}
-          onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-        />
-      </div>
+    const payload: Record<string, unknown> = {
+      name: formData.name,
+      frequency: formData.frequency,
+    };
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
-            City
-          </label>
-          <Input
-            id="city"
-            placeholder="e.g., Bangalore"
-            value={formData.city}
-            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="board" className="block text-sm font-medium text-gray-700 mb-1">
-            Board
-          </label>
-          <select
-            id="board"
-            value={formData.board}
-            onChange={(e) => setFormData({ ...formData, board: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-          >
-            <option value="">Any</option>
-            {BOARDS.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+    if (formData.subject) payload.subject = formData.subject;
+    if (formData.city) payload.city = formData.city;
+    if (formData.board) payload.board = formData.board;
+    if (formData.gradeLevel) payload.gradeLevel = formData.gradeLevel;
+    if (formData.jobType) payload.jobType = formData.jobType;
+    if (formData.salaryMin) payload.salaryMin = Number(formData.salaryMin);
+    if (formData.salaryMax) payload.salaryMax = Number(formData.salaryMax);
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="gradeLevel" className="block text-sm font-medium text-gray-700 mb-1">
-            Grade Level
-          </label>
-          <Input
-            id="gradeLevel"
-            placeholder="e.g., 9-12"
-            value={formData.gradeLevel}
-            onChange={(e) => setFormData({ ...formData, gradeLevel: e.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="jobType" className="block text-sm font-medium text-gray-700 mb-1">
-            Job Type
-          </label>
-          <select
-            id="jobType"
-            value={formData.jobType}
-            onChange={(e) => setFormData({ ...formData, jobType: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-          >
-            <option value="">Any</option>
-            {JOB_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t.replace('_', ' ')}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+    try {
+      if (editingId) {
+        await updateAlert(editingId, payload);
+      } else {
+        await createAlert(payload as Parameters<typeof createAlert>[0]);
+      }
+      toast.success(`Alert ${editingId ? 'updated' : 'created'}`);
+      setIsOpen(false);
+      resetForm();
+      await fetchAlerts();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Failed to save alert'));
+    }
+  }
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="salaryMin" className="block text-sm font-medium text-gray-700 mb-1">
-            Min Salary (₹)
-          </label>
-          <Input
-            id="salaryMin"
-            type="number"
-            placeholder="e.g., 30000"
-            value={formData.salaryMin}
-            onChange={(e) => setFormData({ ...formData, salaryMin: e.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="salaryMax" className="block text-sm font-medium text-gray-700 mb-1">
-            Max Salary (₹)
-          </label>
-          <Input
-            id="salaryMax"
-            type="number"
-            placeholder="e.g., 50000"
-            value={formData.salaryMax}
-            onChange={(e) => setFormData({ ...formData, salaryMax: e.target.value })}
-          />
-        </div>
-      </div>
+  async function deleteAlert(id: string) {
+    const confirmed = window.confirm('Delete this alert?');
+    if (!confirmed) return;
 
-      <div>
-        <label htmlFor="frequency" className="block text-sm font-medium text-gray-700 mb-1">
-          Notification Frequency *
-        </label>
-        <select
-          id="frequency"
-          value={formData.frequency}
-          onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-        >
-          {FREQUENCIES.map((f) => (
-            <option key={f.value} value={f.value}>
-              {f.label}
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
-  );
+    try {
+      await apiDeleteAlert(id);
+      toast.success('Alert deleted');
+      await fetchAlerts();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Failed to delete alert'));
+    }
+  }
+
+  async function toggleAlert(alert: JobAlert) {
+    try {
+      await updateAlert(alert.id, { isActive: !alert.isActive });
+      toast.success(alert.isActive ? 'Alert paused' : 'Alert activated');
+      await fetchAlerts();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Failed to update alert'));
+    }
+  }
+
+  function editAlert(alert: JobAlert) {
+    setFormData({
+      name: alert.name,
+      subject: alert.subject || '',
+      city: alert.city || '',
+      board: alert.board || '',
+      gradeLevel: alert.gradeLevel || '',
+      jobType: alert.jobType || '',
+      salaryMin: alert.salaryMin ? String(alert.salaryMin) : '',
+      salaryMax: alert.salaryMax ? String(alert.salaryMax) : '',
+      frequency: alert.frequency,
+    });
+    setEditingId(alert.id);
+    setIsOpen(true);
+  }
+
+  async function saveWhatsAppSettings() {
+    try {
+      setSavingWhatsApp(true);
+      await updateProfile({ whatsappNumber, whatsappOptin });
+      toast.success('WhatsApp settings saved');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Failed to save WhatsApp settings'));
+    } finally {
+      setSavingWhatsApp(false);
+    }
+  }
 
   return (
     <div className="max-w-4xl mx-auto py-8">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Job Alerts</h1>
-          <p className="text-gray-600">Get notified when matching jobs are posted</p>
-        </div>
+      <div className="mb-8 flex items-center justify-between">
+        <PageHeader title="Job Alerts" subtitle="Get notified when matching jobs are posted" />
         <Button onClick={() => { resetForm(); setIsOpen(true); }}>
           <Bell className="w-4 h-4 mr-2" />
           New Alert
         </Button>
       </div>
 
+      <section className="mb-6 rounded-2xl border border-[var(--eh-border)] bg-white p-5">
+        <p className="font-semibold text-[14px]">WhatsApp Alerts</p>
+        <p className="text-[13px] text-[var(--eh-text-3)] mt-1">
+          Receive job alerts and interview reminders on WhatsApp.
+        </p>
+        <div className="mt-4 space-y-3">
+          <Input
+            type="tel"
+            placeholder="+91 98765 43210"
+            value={whatsappNumber}
+            onChange={(e) => setWhatsappNumber(e.target.value)}
+          />
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={whatsappOptin} onChange={(e) => setWhatsappOptin(e.target.checked)} />
+            <span className="text-[13px]">Send me job alerts on WhatsApp</span>
+          </label>
+          <Button onClick={saveWhatsAppSettings} disabled={savingWhatsApp}>
+            {savingWhatsApp ? 'Saving...' : 'Save WhatsApp settings'}
+          </Button>
+        </div>
+      </section>
+
       <Modal
         open={isOpen}
         onClose={() => setIsOpen(false)}
         title={editingId ? 'Edit Alert' : 'Create Job Alert'}
-        footer={
-          <div className="flex gap-2 justify-end">
-            <Button variant="secondary" onClick={() => setIsOpen(false)}>
-              Cancel
-            </Button>
+        footer={(
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setIsOpen(false)}>Cancel</Button>
             <Button onClick={saveAlert}>{editingId ? 'Update' : 'Create'} Alert</Button>
           </div>
-        }
+        )}
       >
-        {formContent}
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Alert Name *</label>
+            <Input id="name" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} placeholder="e.g., Math jobs in Bangalore" />
+          </div>
+          <div>
+            <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+            <Input id="subject" value={formData.subject} onChange={(e) => setFormData((p) => ({ ...p, subject: e.target.value }))} placeholder="e.g., Mathematics" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">City</label>
+              <Input id="city" value={formData.city} onChange={(e) => setFormData((p) => ({ ...p, city: e.target.value }))} />
+            </div>
+            <div>
+              <label htmlFor="board" className="block text-sm font-medium text-gray-700 mb-1">Board</label>
+              <select id="board" value={formData.board} onChange={(e) => setFormData((p) => ({ ...p, board: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                <option value="">Any</option>
+                {BOARDS.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="gradeLevel" className="block text-sm font-medium text-gray-700 mb-1">Grade Level</label>
+              <Input id="gradeLevel" value={formData.gradeLevel} onChange={(e) => setFormData((p) => ({ ...p, gradeLevel: e.target.value }))} />
+            </div>
+            <div>
+              <label htmlFor="jobType" className="block text-sm font-medium text-gray-700 mb-1">Job Type</label>
+              <select id="jobType" value={formData.jobType} onChange={(e) => setFormData((p) => ({ ...p, jobType: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                <option value="">Any</option>
+                {JOB_TYPES.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="salaryMin" className="block text-sm font-medium text-gray-700 mb-1">Min Salary (INR)</label>
+              <Input id="salaryMin" type="number" value={formData.salaryMin} onChange={(e) => setFormData((p) => ({ ...p, salaryMin: e.target.value }))} />
+            </div>
+            <div>
+              <label htmlFor="salaryMax" className="block text-sm font-medium text-gray-700 mb-1">Max Salary (INR)</label>
+              <Input id="salaryMax" type="number" value={formData.salaryMax} onChange={(e) => setFormData((p) => ({ ...p, salaryMax: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <label htmlFor="frequency" className="block text-sm font-medium text-gray-700 mb-1">Notification Frequency *</label>
+            <select id="frequency" value={formData.frequency} onChange={(e) => setFormData((p) => ({ ...p, frequency: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+              {FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          </div>
+        </div>
       </Modal>
 
       {loading ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <p className="text-gray-600">Loading alerts...</p>
-        </div>
+        <LoadingState title="Loading alerts" message="Fetching your alert subscriptions." />
       ) : alerts.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600 mb-2">No alerts yet</p>
-          <p className="text-sm text-gray-500">Create your first job alert to start getting notified</p>
-        </div>
+        <EmptyState title="No alerts yet" message="Create your first job alert to start getting notified." />
       ) : (
         <div className="space-y-3">
           {alerts.map((alert) => (
-            <div
-              key={alert.id}
-              className="bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between hover:bg-gray-50 transition"
-            >
+            <div key={alert.id} className="bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between hover:bg-gray-50 transition">
               <div className="flex-1">
                 <div className="flex items-center gap-3">
-                  <Button
-                    size="sm"
-                    variant={alert.isActive ? 'primary' : 'secondary'}
-                    onClick={() => toggleAlert(alert)}
-                  >
-                    {alert.isActive ? '🔔' : '🔕'}
+                  <Button size="sm" variant={alert.isActive ? 'primary' : 'secondary'} onClick={() => toggleAlert(alert)}>
+                    {alert.isActive ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
                   </Button>
                   <div>
                     <h3 className="font-medium">{alert.name}</h3>
@@ -381,13 +281,11 @@ export default function AlertsPage() {
                       {alert.subject && <Badge className="text-xs">{alert.subject}</Badge>}
                       {alert.city && <Badge className="text-xs">{alert.city}</Badge>}
                       {alert.board && <Badge className="text-xs">{alert.board}</Badge>}
-                      {alert.salaryMin && (
-                        <Badge className="text-xs">
-                          ₹{alert.salaryMin}-{alert.salaryMax || alert.salaryMin}
-                        </Badge>
+                      {typeof alert.salaryMin === 'number' && (
+                        <Badge className="text-xs">INR {alert.salaryMin}-{alert.salaryMax || alert.salaryMin}</Badge>
                       )}
                       <Badge className="text-xs">
-                        {FREQUENCIES.find((f) => f.value === alert.frequency)?.label}
+                        {FREQUENCIES.find((f) => f.value === alert.frequency)?.label || alert.frequency}
                       </Badge>
                     </div>
                   </div>
@@ -406,14 +304,13 @@ export default function AlertsPage() {
         </div>
       )}
 
-      {/* Info section */}
       <div className="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
         <h3 className="font-semibold text-blue-900 mb-2">How job alerts work</h3>
         <ul className="text-sm text-blue-800 space-y-1">
-          <li>• Alerts are checked at 8 AM daily (or immediately when posted if you choose real-time)</li>
-          <li>• You'll receive an email with matching jobs</li>
-          <li>• Create multiple alerts for different roles or locations</li>
-          <li>• Pause or delete alerts anytime</li>
+          <li>- Alerts are checked at 8 AM daily (or immediately when posted for real-time alerts)</li>
+          <li>- You receive an email with matching jobs</li>
+          <li>- Create multiple alerts for different roles or locations</li>
+          <li>- Pause or delete alerts anytime</li>
         </ul>
       </div>
     </div>

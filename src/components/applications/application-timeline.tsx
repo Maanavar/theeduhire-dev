@@ -89,7 +89,7 @@ export function ApplicationTimeline({ applicationId, appliedAt }: ApplicationTim
   return (
     <div className="space-y-0">
       {entries.map((entry, idx) => {
-        const colors = STATUS_COLORS[entry.status];
+        const colors = STATUS_COLORS[entry.status] ?? STATUS_COLORS["PENDING"];
         const isLast = idx === entries.length - 1;
 
         return (

@@ -9,10 +9,10 @@ import type {
   TeacherProfile,
   JobRequirement,
   JobBenefit,
+  ScreeningQuestion,
   ApplicationStatusHistory,
   ApplicationStatus,
   Interview,
-  AIMatchScore,
 } from "@prisma/client";
 
 // Job with all relations loaded (for detail view)
@@ -20,6 +20,7 @@ export type JobWithDetails = JobPosting & {
   school: SchoolProfile;
   requirements: JobRequirement[];
   benefits: JobBenefit[];
+  screeningQuestions: ScreeningQuestion[];
   _count?: { applications: number };
 };
 
@@ -27,7 +28,7 @@ export type JobWithDetails = JobPosting & {
 export type JobListItem = Pick<
   JobPosting,
   "id" | "title" | "subject" | "board" | "gradeLevel" | "jobType" |
-  "salaryMin" | "salaryMax" | "postedAt" | "status" | "experience"
+  "salaryMin" | "salaryMax" | "postedAt" | "status" | "experience" | "experienceLevel" | "isUrgent" | "requiredWithin48h" | "requiresTet"
 > & {
   school: Pick<SchoolProfile, "schoolName" | "city" | "verified" | "logoUrl">;
 };
@@ -107,12 +108,14 @@ export type MatchBreakdown = {
   board: number;
   salary: number;
   experience: number;
+  tet?: number;
 };
 
 // Job recommendation for teacher
 export type JobRecommendation = JobListItem & {
   matchScore: number; // 0-100
   explanation: string;
+  breakdown?: MatchBreakdown | null;
 };
 
 // Ranked candidate for school (for applicants list)

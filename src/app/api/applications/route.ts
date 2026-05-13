@@ -4,7 +4,7 @@ import { requireAuth } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireAuth(["TEACHER", "ADMIN"]);
+    const auth = await requireAuth(["TEACHER"]);
     if ("error" in auth) {
       return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }

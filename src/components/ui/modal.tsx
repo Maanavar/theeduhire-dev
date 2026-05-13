@@ -44,7 +44,7 @@ export default function Modal({
       document.removeEventListener("keydown", handleKey);
       document.body.style.overflow = "";
     };
-  }, [open]);
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -54,15 +54,15 @@ export default function Modal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 animate-fade-in"
       style={{ backgroundColor: "rgba(0,0,0,0.35)", backdropFilter: "blur(4px)" }}
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div
         ref={contentRef}
         className={cn(
-          "w-full bg-white rounded-3xl shadow-2xl flex flex-col animate-scale-in",
-          "max-h-[90vh]",
+          "w-full bg-white shadow-2xl flex flex-col animate-scale-in",
+          "h-screen max-h-screen rounded-none sm:h-auto sm:max-h-[90vh] sm:rounded-3xl",
           maxWidth
         )}
       >

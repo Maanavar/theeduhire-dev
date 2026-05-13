@@ -6,20 +6,18 @@ import JobListPanel from "./job-list-panel";
 import JobDetailPanel from "./job-detail-panel";
 import type { JobListItem } from "@/types";
 
-export default function JobSplitView() {
+export default function JobSplitView({ basePath = "/jobs" }: { basePath?: string }) {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [jobs, setJobs]         = useState<JobListItem[]>([]);
-  const [total, setTotal]       = useState(0);
+  const [jobs, setJobs] = useState<JobListItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    searchParams.get("selected")
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get("selected"));
 
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
-    const keys = ["search", "subject", "location", "board", "gradeLevel", "page", "limit"];
+    const keys = ["search", "subject", "location", "board", "gradeLevel", "experienceLevel", "page", "limit", "sort"];
     keys.forEach((key) => {
       const val = searchParams.get(key);
       if (val) params.set(key, val);
@@ -40,7 +38,7 @@ export default function JobSplitView() {
           setTotal(data.pagination.total);
 
           const currentSelected = searchParams.get("selected");
-          const exists = data.data.some((j: JobListItem) => j.id === currentSelected);
+          const exists = data.data.some((job: JobListItem) => job.id === currentSelected);
           if (data.data.length > 0 && (!currentSelected || !exists)) {
             setSelectedId(data.data[0].id);
           }
@@ -48,9 +46,13 @@ export default function JobSplitView() {
         }
       })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setIsLoading(false); });
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [buildQuery, searchParams]);
 
   const handleSelect = useCallback(
@@ -58,23 +60,20 @@ export default function JobSplitView() {
       setSelectedId(id);
       const params = new URLSearchParams(searchParams.toString());
       params.set("selected", id);
-      router.replace(`/jobs?${params.toString()}`, { scroll: false });
+      router.replace(`${basePath}?${params.toString()}`, { scroll: false });
     },
-    [router, searchParams]
+    [basePath, router, searchParams]
   );
 
   return (
     <div
-      className="rounded-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-[360px_1fr]"
+      className="grid grid-cols-1 overflow-hidden rounded-[30px] border border-[var(--eh-border)] bg-white lg:grid-cols-[380px_1fr]"
       style={{
-        background: "var(--surface-raised)",
-        border: "1px solid var(--border-subtle)",
-        boxShadow: "var(--shadow-sm)",
+        boxShadow: "0 16px 40px rgba(15,23,42,0.05)",
         minHeight: "calc(100vh - 220px)",
       }}
     >
-      {/* Left: Job List */}
-      <div className="border-r border-black/[0.05]">
+      <div className="border-r border-[var(--eh-border)] bg-[var(--surface-base)]">
         <JobListPanel
           jobs={jobs}
           selectedId={selectedId}
@@ -84,13 +83,11 @@ export default function JobSplitView() {
         />
       </div>
 
-      {/* Right: Detail — desktop */}
-      <div className="hidden lg:block bg-white">
+      <div className="hidden bg-white lg:block">
         <JobDetailPanel jobId={selectedId} />
       </div>
 
-      {/* Mobile: detail below list */}
-      <div className="lg:hidden border-t border-black/[0.05]">
+      <div className="border-t border-[var(--eh-border)] lg:hidden">
         {selectedId && <JobDetailPanel jobId={selectedId} />}
       </div>
     </div>

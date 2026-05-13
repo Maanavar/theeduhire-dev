@@ -1,20 +1,30 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const auth = await requireAuth(["SCHOOL_ADMIN", "ADMIN"]);
+    const auth = await requireAuth(["SCHOOL_ADMIN"]);
     if ("error" in auth) {
       return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }
+
+    const now = new Date();
+    await prisma.jobPosting.updateMany({
+      where: {
+        postedBy: auth.user.id,
+        status: "ACTIVE" as any,
+        expiresAt: { lt: now },
+      },
+      data: { status: "EXPIRED" as any },
+    });
 
     const jobs = await prisma.jobPosting.findMany({
       where: { postedBy: auth.user.id },
       select: {
         id: true, title: true, subject: true, board: true, gradeLevel: true,
         jobType: true, experience: true, salaryMin: true, salaryMax: true,
-        postedAt: true, status: true,
+        postedAt: true, expiresAt: true, status: true,
         school: { select: { schoolName: true, city: true, verified: true, logoUrl: true } },
         _count: { select: { applications: true } },
       },

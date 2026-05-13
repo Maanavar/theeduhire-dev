@@ -18,6 +18,14 @@ const updateAlertSchema = z.object({
   salaryMax: z.number().int().positive().optional(),
   frequency: z.enum(["IMMEDIATE", "DAILY_DIGEST", "WEEKLY_DIGEST"]).optional(),
   isActive: z.boolean().optional(),
+}).superRefine((data, ctx) => {
+  if (typeof data.salaryMin === "number" && typeof data.salaryMax === "number" && data.salaryMin > data.salaryMax) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["salaryMax"],
+      message: "Maximum salary must be greater than or equal to minimum salary",
+    });
+  }
 });
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

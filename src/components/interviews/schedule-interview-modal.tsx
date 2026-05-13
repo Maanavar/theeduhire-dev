@@ -3,13 +3,17 @@
 import { useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Interview } from '@prisma/client';
+import { getApiErrorMessage } from "@/lib/api/client";
+import {
+  scheduleInterview,
+  type InterviewRecord,
+} from "@/lib/api/hiring-client";
 
 interface ScheduleInterviewModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   applicationId: string;
-  onSuccess: (interview: Interview) => void;
+  onSuccess: (interview: InterviewRecord) => void;
 }
 
 export function ScheduleInterviewModal({
@@ -25,6 +29,7 @@ export function ScheduleInterviewModal({
     type: 'VIDEO',
     meetingLink: '',
     location: '',
+    schoolNotes: '',
   });
 
   async function handleSubmit(e: React.FormEvent) {
@@ -47,27 +52,17 @@ export function ScheduleInterviewModal({
 
     try {
       setLoading(true);
-      const res = await fetch('/api/interviews', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          applicationId,
-          scheduledAt: new Date(formData.scheduledAt).toISOString(),
-          durationMins: parseInt(formData.durationMins),
-          type: formData.type,
-          meetingLink: formData.meetingLink || undefined,
-          location: formData.location || undefined,
-        }),
+      const data = await scheduleInterview({
+        applicationId,
+        scheduledAt: new Date(formData.scheduledAt).toISOString(),
+        durationMins: parseInt(formData.durationMins),
+        type: formData.type as "VIDEO" | "PHONE" | "IN_PERSON",
+        meetingLink: formData.meetingLink || undefined,
+        location: formData.location || undefined,
+        schoolNotes: formData.schoolNotes || undefined,
       });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Failed to schedule interview');
-      }
-
-      const data = await res.json();
       toast.success('Interview scheduled successfully');
-      onSuccess(data.data);
+      onSuccess(data);
       onOpenChange(false);
       setFormData({
         scheduledAt: '',
@@ -75,9 +70,10 @@ export function ScheduleInterviewModal({
         type: 'VIDEO',
         meetingLink: '',
         location: '',
+        schoolNotes: '',
       });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to schedule interview');
+      toast.error(getApiErrorMessage(error, 'Failed to schedule interview'));
     } finally {
       setLoading(false);
     }
@@ -210,6 +206,20 @@ export function ScheduleInterviewModal({
               />
             </div>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Internal Notes (optional)
+            </label>
+            <textarea
+              placeholder="Interview panel instructions or context"
+              value={formData.schoolNotes}
+              onChange={(e) => setFormData({ ...formData, schoolNotes: e.target.value })}
+              disabled={loading}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 resize-none"
+              rows={3}
+            />
+          </div>
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-4 border-t border-gray-200 mt-6">

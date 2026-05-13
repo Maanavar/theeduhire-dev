@@ -7,6 +7,10 @@ import { PrismaClient, Board, JobType, AvailabilityStatus } from "@prisma/client
 import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
+const SEED_PASSWORD = process.env.SEED_DEFAULT_PASSWORD?.trim() || "";
+if (!SEED_PASSWORD || SEED_PASSWORD.length < 8) {
+  throw new Error("SEED_DEFAULT_PASSWORD must be set and at least 8 characters long.");
+}
 
 // Test data
 const SCHOOLS = [
@@ -295,7 +299,7 @@ const JOBS_BY_SCHOOL = {
 };
 
 async function clearAllData() {
-  console.log("🗑️  Clearing existing data...");
+  console.log("  Clearing existing data...");
   // Order matters due to foreign key constraints
   await prisma.alertHistory.deleteMany();
   await prisma.jobAlert.deleteMany();
@@ -313,11 +317,11 @@ async function clearAllData() {
   await prisma.teacherProfile.deleteMany();
   await prisma.schoolProfile.deleteMany();
   await prisma.user.deleteMany();
-  console.log("✓ All data cleared\n");
+  console.log(" All data cleared\n");
 }
 
 async function seedSchools() {
-  console.log("🏫 Creating schools...");
+  console.log(" Creating schools...");
   const createdSchools = [];
 
   for (let i = 0; i < SCHOOLS.length; i++) {
@@ -329,7 +333,7 @@ async function seedSchools() {
         role: "SCHOOL_ADMIN",
         phone: `+91 ${9000000000 + i}`,
         emailVerified: true,
-        hashedPassword: await hash("password123", 10),
+        hashedPassword: await hash(SEED_PASSWORD, 10),
       },
     });
 
@@ -347,14 +351,14 @@ async function seedSchools() {
     });
 
     createdSchools.push({ user, school });
-    console.log(`  ✓ ${schoolData.name}`);
+    console.log(`   ${schoolData.name}`);
   }
 
   return createdSchools;
 }
 
 async function seedTeachers() {
-  console.log("\n👨‍🏫 Creating teachers...");
+  console.log("\n Creating teachers...");
   const createdTeachers = [];
 
   for (let i = 0; i < TEACHERS.length; i++) {
@@ -366,7 +370,7 @@ async function seedTeachers() {
         role: "TEACHER",
         phone: `+91 ${8000000000 + i}`,
         emailVerified: true,
-        hashedPassword: await hash("password123", 10),
+        hashedPassword: await hash(SEED_PASSWORD, 10),
       },
     });
 
@@ -384,14 +388,14 @@ async function seedTeachers() {
     });
 
     createdTeachers.push({ user, profile });
-    console.log(`  ✓ ${teacherData.name} (${teacherData.city})`);
+    console.log(`   ${teacherData.name} (${teacherData.city})`);
   }
 
   return createdTeachers;
 }
 
 async function seedJobs(schools: any[]) {
-  console.log("\n📋 Creating jobs...");
+  console.log("\n Creating jobs...");
   const createdJobs = [];
 
   for (let i = 0; i < schools.length; i++) {
@@ -437,7 +441,7 @@ async function seedJobs(schools: any[]) {
       });
 
       createdJobs.push(job);
-      console.log(`  ✓ ${jobData.title} at ${school.school.schoolName}`);
+      console.log(`   ${jobData.title} at ${school.school.schoolName}`);
     }
   }
 
@@ -445,7 +449,7 @@ async function seedJobs(schools: any[]) {
 }
 
 async function seedApplications(teachers: any[], jobs: any[]) {
-  console.log("\n📝 Creating applications...");
+  console.log("\n Creating applications...");
   let appCount = 0;
 
   // Each teacher applies for 2-3 relevant jobs
@@ -493,7 +497,7 @@ async function seedApplications(teachers: any[], jobs: any[]) {
       });
     }
 
-    console.log(`  ✓ ${teacher.profile.city} - ${teacher.user.name} applied for ${jobsToApply.length} jobs`);
+    console.log(`   ${teacher.profile.city} - ${teacher.user.name} applied for ${jobsToApply.length} jobs`);
   }
 
   console.log(`\n  Total applications created: ${appCount}`);
@@ -502,9 +506,9 @@ async function seedApplications(teachers: any[], jobs: any[]) {
 
 async function main() {
   try {
-    console.log("═══════════════════════════════════════════════");
-    console.log("    🌱 Phase 4 Database Seed Script 🌱");
-    console.log("═══════════════════════════════════════════════\n");
+    console.log("-----------------------------------------------");
+    console.log("     Phase 4 Database Seed Script ");
+    console.log("-----------------------------------------------\n");
 
     await clearAllData();
 
@@ -523,24 +527,25 @@ async function main() {
 
     await seedApplications(teachers, jobsWithSchool);
 
-    console.log("\n═══════════════════════════════════════════════");
-    console.log("✅ Seed complete! Summary:");
-    console.log(`   • Schools: ${SCHOOLS.length}`);
-    console.log(`   • Teachers: ${TEACHERS.length}`);
-    console.log(`   • Jobs: ${allJobs.length + jobsWithSchool.length}`);
-    console.log("═══════════════════════════════════════════════\n");
+    console.log("\n-----------------------------------------------");
+    console.log(" Seed complete! Summary:");
+    console.log(`    Schools: ${SCHOOLS.length}`);
+    console.log(`    Teachers: ${TEACHERS.length}`);
+    console.log(`    Jobs: ${allJobs.length + jobsWithSchool.length}`);
+    console.log("-----------------------------------------------\n");
 
-    console.log("📧 Test Credentials:");
-    console.log("   Teachers: teacher1@eduhire.in - teacher12@eduhire.in (password: password123)");
-    console.log("   Schools: admin1-6@school.edu (password: password123)\n");
+    console.log(" Test Credentials:");
+    console.log("   Teachers: teacher1@eduhire.in - teacher12@eduhire.in");
+    console.log("   Schools: admin1-6@school.edu");
+    console.log("   Password source: SEED_DEFAULT_PASSWORD\n");
 
-    console.log("🚀 You can now test:");
-    console.log("   • /dashboard/recommendations (AI matching)");
-    console.log("   • /dashboard/interviews (view interviews)");
-    console.log("   • Schedule interviews from school admin\n");
+    console.log(" You can now test:");
+    console.log("    /dashboard/recommendations (AI matching)");
+    console.log("    /dashboard/interviews (view interviews)");
+    console.log("    Schedule interviews from school admin\n");
 
   } catch (error) {
-    console.error("❌ Seed failed:", error);
+    console.error(" Seed failed:", error);
     process.exit(1);
   } finally {
     await prisma.$disconnect();
@@ -548,3 +553,6 @@ async function main() {
 }
 
 main();
+
+
+

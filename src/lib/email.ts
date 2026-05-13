@@ -7,6 +7,22 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.EMAIL_FROM || "EduHire <noreply@theeduhire.in>";
 const BASE_URL = process.env.NEXTAUTH_URL || "https://theeduhire.in";
 
+function isEmailDeliveryConfigured() {
+  return Boolean(process.env.RESEND_API_KEY?.trim());
+}
+
+async function deliverEmail(payload: Parameters<typeof resend.emails.send>[0]) {
+  if (!isEmailDeliveryConfigured()) {
+    console.warn("[email] RESEND_API_KEY is missing. Email was not sent.", {
+      to: payload.to,
+      subject: payload.subject,
+    });
+    return { success: false, skipped: true, reason: "missing_resend_api_key" } as const;
+  }
+
+  return resend.emails.send(payload);
+}
+
 // ── Shared HTML helpers ──────────────────────────────────────────────────────
 
 function emailWrapper(content: string): string {
@@ -63,7 +79,7 @@ export async function sendVerificationEmail(email: string, name: string, token: 
     return { success: true };
   }
 
-  return resend.emails.send({ from: FROM, to: email, subject: "Verify your EduHire account", html });
+  return deliverEmail({ from: FROM, to: email, subject: "Verify your EduHire account", html });
 }
 
 // ── 2. Application Confirmation (to Teacher) ─────────────────────────────────
@@ -95,7 +111,7 @@ export async function sendApplicationConfirmation({
     <p>You can track all your applications in your <a href="${BASE_URL}/dashboard/applications" style="color:#2a7a4e">dashboard</a>.</p>
   `);
 
-  return resend.emails.send({ from: FROM, to: teacherEmail, subject: `Application received — ${jobTitle} at ${schoolName}`, html });
+  return deliverEmail({ from: FROM, to: teacherEmail, subject: `Application received — ${jobTitle} at ${schoolName}`, html });
 }
 
 // ── 3. Application Status Update (to Teacher) ────────────────────────────────
@@ -140,7 +156,6 @@ export async function sendStatusUpdate({
 }) {
   const copy = STATUS_COPY[newStatus];
   if (!copy) return; // Don't send email for PENDING
-
   const jobUrl = `${BASE_URL}/jobs/${jobId}`;
   const html = emailWrapper(`
     <h1>${copy.label}</h1>
@@ -151,10 +166,11 @@ export async function sendStatusUpdate({
       <div class="detail-row"><span class="detail-label">School</span><span class="detail-value">${schoolName}</span></div>
       <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="badge ${copy.badge}">${newStatus}</span></span></div>
     </div>
-    <a href="${BASE_URL}/dashboard/applications" class="btn">View All Applications</a>
+    <a href="${jobUrl}" class="btn">View Job Posting</a>
+    <p>You can also follow all application progress in your <a href="${BASE_URL}/dashboard/applications" style="color:#2a7a4e">dashboard</a>.</p>
   `);
 
-  return resend.emails.send({
+  return deliverEmail({
     from: FROM,
     to: teacherEmail,
     subject: `${copy.label} — ${jobTitle} at ${schoolName}`,
@@ -177,7 +193,7 @@ export async function sendNewApplicationAlert({
   jobTitle: string;
   jobId: string;
 }) {
-  const applicantsUrl = `${BASE_URL}/dashboard/my-jobs/${jobId}/applicants`;
+  const applicantsUrl = `${BASE_URL}/dashboard/applicants?jobId=${jobId}`;
   const html = emailWrapper(`
     <h1>New application received</h1>
     <p>Hi ${schoolName},</p>
@@ -186,7 +202,7 @@ export async function sendNewApplicationAlert({
     <p style="font-size:13px;color:#888780">Manage all applicants in your school dashboard.</p>
   `);
 
-  return resend.emails.send({
+  return deliverEmail({
     from: FROM,
     to: schoolEmail,
     subject: `New application for ${jobTitle}`,
@@ -215,7 +231,7 @@ export async function sendContactNotification({
     <p style="white-space:pre-wrap;background:#f4f4f0;border-radius:10px;padding:16px;font-size:14px">${message}</p>
   `);
 
-  return resend.emails.send({
+  return deliverEmail({
     from: FROM,
     to: adminEmail,
     subject: `Contact form: ${senderName}`,
@@ -265,7 +281,7 @@ export async function sendJobAlertDigest({
     </p>
   `);
 
-  return resend.emails.send({
+  return deliverEmail({
     from: FROM,
     to: teacherEmail,
     subject: `${jobs.length} new ${alertName} job${jobs.length !== 1 ? "s" : ""} posted`,
@@ -328,7 +344,7 @@ export async function sendInterviewInvite({
     });
   }
 
-  return resend.emails.send({
+  return deliverEmail({
     from: FROM,
     to: teacherEmail,
     subject: `Interview invitation — ${jobTitle} at ${schoolName}`,
@@ -371,7 +387,7 @@ export async function sendInterviewConfirmation({
     <p style="font-size:13px;color:#888780">Make sure you're prepared for the interview at the scheduled time.</p>
   `);
 
-  return resend.emails.send({
+  return deliverEmail({
     from: FROM,
     to: schoolEmail,
     subject: `Interview confirmed — ${teacherName} for ${jobTitle}`,
@@ -409,7 +425,7 @@ export async function sendInterviewCancellation({
     <p style="font-size:13px;color:#888780">If you have any questions, please contact the school directly.</p>
   `);
 
-  return resend.emails.send({
+  return deliverEmail({
     from: FROM,
     to: email,
     subject: `Interview cancelled — ${jobTitle} at ${schoolName}`,
@@ -420,5 +436,5 @@ export async function sendInterviewCancellation({
 // ── Generic fallback ─────────────────────────────────────────────────────────
 
 export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
-  return resend.emails.send({ from: FROM, to, subject, html });
+  return deliverEmail({ from: FROM, to, subject, html });
 }

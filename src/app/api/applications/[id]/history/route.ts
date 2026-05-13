@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
+import { canManageApplication } from "@/lib/policies/application-policy";
 
 export async function GET(
   req: NextRequest,
@@ -19,7 +20,7 @@ export async function GET(
       where: { id },
       include: {
         job: {
-          select: { postedBy: true },
+          select: { postedBy: true, schoolId: true },
         },
       },
     });
@@ -30,10 +31,14 @@ export async function GET(
 
     // Authorization: TEACHER (own application) | SCHOOL_ADMIN (their job) | ADMIN
     const isTeacherOwner = application.applicantId === auth.user.id;
-    const isSchoolOwner = application.job.postedBy === auth.user.id && auth.user.role === "SCHOOL_ADMIN";
-    const isAdmin = auth.user.role === "ADMIN";
+    const isSchoolOwner = await canManageApplication(prisma, auth.user, {
+      job: {
+        postedBy: application.job.postedBy,
+        schoolId: application.job.schoolId,
+      },
+    });
 
-    if (!isTeacherOwner && !isSchoolOwner && !isAdmin) {
+    if (!isTeacherOwner && !isSchoolOwner) {
       return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
     }
 

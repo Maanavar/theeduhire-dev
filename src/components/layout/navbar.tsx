@@ -1,241 +1,252 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
-import { Menu, X, Plus, LogOut, User, LayoutDashboard, ChevronDown } from "lucide-react";
+import { signOut, useSession } from "next-auth/react";
+import {
+  ArrowUpRight,
+  BriefcaseBusiness,
+  ChevronDown,
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  MessageSquare,
+  User,
+  Users,
+  X,
+} from "lucide-react";
+import { useLang } from "@/lib/i18n/context";
 
-const NAV_LINKS = [
-  { href: "/", label: "Home" },
-  { href: "/jobs", label: "Browse Jobs" },
-  { href: "/contact", label: "Contact" },
+const TEACHER_AUTH_LINKS = [
+  { href: "/dashboard", label: "Home", icon: LayoutDashboard },
+  { href: "/dashboard/jobs", label: "Jobs", icon: BriefcaseBusiness },
+  { href: "/dashboard/applications", label: "Applications", icon: FileText },
+  { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
+];
+
+const SCHOOL_AUTH_LINKS = [
+  { href: "/dashboard/school", label: "Home", icon: LayoutDashboard },
+  { href: "/dashboard/my-jobs", label: "Jobs", icon: BriefcaseBusiness },
+  { href: "/dashboard/applicants", label: "Applicants", icon: Users },
+  { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
 ];
 
 export default function Navbar() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
+  const { lang, t, toggleLang } = useLang();
+
   const [menuOpen, setMenuOpen] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const isAuthed = status === "authenticated" && !!session?.user;
+  const isSchool = session?.user?.role === "SCHOOL_ADMIN";
+  const dashboardHref = isSchool ? "/dashboard/school" : "/dashboard";
+  const initials =
+    session?.user?.name
+      ?.split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "U";
+
+  const isHomepage = pathname === "/";
+
+  const translatedNavLinks = [
+    { href: "/", label: t.nav.home },
+    { href: "/#for-schools", label: t.nav.forSchools },
+    { href: "/#for-teachers", label: t.nav.forTeachers },
+    { href: "/#platform", label: t.nav.howItWorks },
+    { href: "/#questions", label: t.nav.faq },
+    { href: "/#contact", label: t.nav.contact },
+  ];
+
+  const publicLinks = translatedNavLinks.map((link) =>
+    isSchool && link.href === "/jobs" ? { ...link, href: "/dashboard/school" } : link
+  );
+  const authLinks = isSchool ? SCHOOL_AUTH_LINKS : TEACHER_AUTH_LINKS;
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
+    const onScroll = () => setScrolled(window.scrollY > 12);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
+    const onMouseDown = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
       }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
   }, []);
 
-  // Lock body scroll when mobile menu open
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [menuOpen]);
-
-  const isTeacher = session?.user?.role === "TEACHER";
-  const isSchool  = session?.user?.role === "SCHOOL_ADMIN";
-  const isAuthed  = status === "authenticated" && !!session?.user;
-  const isOnDashboard = pathname.startsWith("/dashboard");
-  const dashboardHref = isSchool ? "/dashboard/my-jobs" : "/dashboard/applications";
-  const showPostCta = isSchool || !isAuthed;
-
-  // Dynamic nav links based on auth status
-  const navLinks = NAV_LINKS.map(link => {
-    if (link.href === "/" && isAuthed) {
-      return { ...link, href: dashboardHref };
-    }
-    return link;
-  });
-
-  const homeHref = isAuthed ? dashboardHref : "/";
-  const initials = session?.user?.name?.charAt(0).toUpperCase() || "U";
 
   return (
     <>
       <nav
-        className={`sticky top-0 z-50 h-[58px] px-5 transition-all duration-200 ${
-          scrolled
-            ? "bg-glass-nav border-b border-black/[0.06] shadow-sm"
-            : "bg-transparent border-b border-transparent"
-        }`}
+        className={[
+          "sticky top-0 z-50 border-b px-5 transition-all duration-300 md:px-8",
+          isAuthed
+            ? "h-[64px] border-[var(--eh-border)] bg-white/92 backdrop-blur-[20px]"
+            : scrolled
+              ? "h-[64px] border-[var(--eh-border)] bg-white/82 backdrop-blur-[22px]"
+              : isHomepage
+                ? "h-[64px] border-transparent bg-transparent"
+                : "h-[64px] border-transparent bg-white/50 backdrop-blur-[10px]",
+        ].join(" ")}
       >
-        <div className="max-w-[1280px] mx-auto flex items-center justify-between h-full">
-
-          {/* Logo */}
-          <Link href={homeHref} className="flex items-center gap-2 group">
-            <div className="w-7 h-7 bg-brand-gradient rounded-lg flex items-center justify-center shadow-brand">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M7 1.5C4 1.5 2 3.5 2 6.5c0 2 1 3.5 2.5 4.5L7 12.5l2.5-1.5C11 9.5 12 8 12 6c0-3-2-4.5-5-4.5z" fill="white" fillOpacity=".9"/>
-              </svg>
-            </div>
-            <span className="font-display text-[19px] font-bold text-gray-900 tracking-[-0.02em] group-hover:text-brand-600 transition-colors duration-150">
-              EduHire
-            </span>
-            <span className="text-[10px] font-semibold bg-brand-50 text-brand-600 px-2 py-0.5 rounded-full tracking-wide border border-brand-100">
-              TN
-            </span>
+        <div className={`mx-auto flex h-full items-center justify-between gap-4 ${isAuthed ? "max-w-[1120px]" : "max-w-[1320px]"}`}>
+          <Link href={isAuthed ? dashboardHref : "/"} className="inline-flex shrink-0 items-center gap-2.5">
+            <div className="eh-logo-mark h-[30px] w-[30px] rounded-[10px]" />
+            {!isAuthed ? (
+              <div>
+                <span className="block font-display text-[21px] font-semibold leading-none tracking-[-0.03em] text-[var(--eh-text)]">EduHire</span>
+                <span className="mt-0.5 hidden text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--eh-text-4)] sm:block">
+                  Education hiring
+                </span>
+              </div>
+            ) : null}
           </Link>
 
-          {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-0.5">
-            {navLinks.map((link) => {
-              const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
-              return (
+          {isAuthed ? (
+            <div className="hidden items-center gap-1 lg:flex">
+              {authLinks.map((link) => {
+                const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+                const Icon = link.icon;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={[
+                      "flex min-w-[88px] items-center justify-center gap-2 rounded-xl px-4 py-2 text-[13px] font-medium transition-colors",
+                      active
+                        ? "bg-[var(--surface-base)] text-[var(--eh-text)]"
+                        : "text-[var(--eh-text-2)] hover:bg-[var(--surface-base)] hover:text-[var(--eh-text)]",
+                    ].join(" ")}
+                  >
+                    <Icon size={15} className={active ? "text-[var(--color-brand-600)]" : "text-[var(--eh-text-4)]"} />
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="hidden items-center gap-1 md:flex">
+              {publicLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-[120ms] ${
-                    isActive
-                      ? "text-brand-600 bg-brand-50"
-                      : "text-gray-500 hover:text-gray-900 hover:bg-black/[0.04]"
-                  }`}
+                  className="rounded-full px-3 py-2 text-[13.5px] font-medium text-[var(--eh-text-2)] transition-colors hover:bg-white/70 hover:text-[var(--eh-text)]"
                 >
                   {link.label}
                 </Link>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
 
-          {/* Auth area */}
-          <div className="hidden md:flex items-center gap-2">
-            {status === "loading" && (
-              <div className="w-24 h-8 skeleton rounded-lg" />
-            )}
-
-            {!isAuthed && status !== "loading" && (
+          <div className="hidden items-center gap-2 md:flex">
+            <button
+              onClick={toggleLang}
+              title={lang === "en" ? "Switch to Tamil" : "Switch to English"}
+              className="rounded-full border border-[var(--eh-border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--eh-text-3)] transition-colors hover:bg-white/70 hover:text-[var(--eh-text)]"
+            >
+              {lang === "en" ? "தமிழ்" : "EN"}
+            </button>
+            {!isAuthed && status !== "loading" ? (
               <>
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-black/[0.04] transition-all duration-[120ms]"
-                  >
-                    Sign In
-                    <ChevronDown
-                      size={13}
-                      className={`text-gray-400 transition-transform duration-[120ms] ${dropdownOpen ? "rotate-180" : ""}`}
-                    />
-                  </button>
-
-                  {dropdownOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-2xl shadow-xl border border-black/[0.06] py-1.5 z-50 animate-scale-in">
-                      <Link
-                        href="/auth/signin-teacher"
-                        onClick={() => setDropdownOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors rounded-xl mx-1.5"
-                      >
-                        <span className="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center text-base">👨‍🏫</span>
-                        <div>
-                          <div className="font-medium leading-none mb-0.5">Teacher</div>
-                          <div className="text-xs text-gray-400">Apply for jobs</div>
-                        </div>
-                      </Link>
-                      <Link
-                        href="/auth/signin-school"
-                        onClick={() => setDropdownOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors rounded-xl mx-1.5"
-                      >
-                        <span className="w-7 h-7 bg-brand-50 rounded-lg flex items-center justify-center text-base">🏫</span>
-                        <div>
-                          <div className="font-medium leading-none mb-0.5">School Admin</div>
-                          <div className="text-xs text-gray-400">Post & manage jobs</div>
-                        </div>
-                      </Link>
-                    </div>
-                  )}
-                </div>
-
                 <Link
-                  href="/auth/signup?role=school"
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600 transition-all duration-[120ms] shadow-brand hover:shadow-brand-lg hover:-translate-y-px active:translate-y-0"
+                  href="/auth/signin"
+                  className="rounded-full px-3 py-2 text-[13.5px] font-medium text-[var(--eh-text-2)] transition-colors hover:bg-white/70 hover:text-[var(--eh-text)]"
                 >
-                  <Plus size={14} />
-                  Post a Job
+                  {t.nav.signIn}
                 </Link>
-              </>
-            )}
-
-            {isAuthed && (
-              <div className="flex items-center gap-2">
-                {isSchool && (
-                  <Link
-                    href="/dashboard/post-job"
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600 transition-all duration-[120ms] shadow-brand hover:-translate-y-px active:translate-y-0"
-                  >
-                    <Plus size={14} />
-                    Post a Job
+                {isHomepage ? (
+                  <>
+                    <Link href="/jobs" className="eh-btn eh-btn-secondary px-[16px] py-[8px] text-[13px]">
+                      {t.nav.exploreJobs}
+                    </Link>
+                    <Link href="/auth/signup" className="eh-btn eh-btn-primary px-[16px] py-[8px] text-[13px]">
+                      {t.nav.startHiring} <ArrowUpRight size={14} />
+                    </Link>
+                  </>
+                ) : (
+                  <Link href="/auth/signup" className="eh-btn eh-btn-primary px-[16px] py-[8px] text-[13px]">
+                    {t.nav.createAccount}
                   </Link>
                 )}
+              </>
+            ) : null}
 
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
-                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-black/[0.04] transition-all duration-[120ms] group"
-                  >
-                    <div className="w-7 h-7 bg-brand-gradient rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-xs">
-                      {initials}
-                    </div>
-                    <span className="text-sm font-medium text-gray-700 max-w-[96px] truncate hidden lg:block">
+            {isAuthed ? (
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setUserMenuOpen((prev) => !prev)}
+                  className="flex items-center gap-2 rounded-full px-2 py-1.5 transition-colors hover:bg-[var(--surface-base)]"
+                >
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand-gradient text-xs font-bold text-white">
+                    {initials}
+                  </span>
+                  <span className="hidden text-left lg:block">
+                    <span className="block max-w-[120px] truncate text-[12px] font-semibold leading-none text-[var(--eh-text)]">
                       {session.user.name}
                     </span>
-                    <ChevronDown
-                      size={13}
-                      className={`text-gray-400 transition-transform duration-[120ms] ${dropdownOpen ? "rotate-180" : ""}`}
-                    />
-                  </button>
+                    <span className="mt-0.5 block text-[11px] leading-none text-[var(--eh-text-4)]">
+                      {isSchool ? "School admin" : "Teacher"}
+                    </span>
+                  </span>
+                  <ChevronDown size={13} className={`text-[var(--eh-text-4)] transition-transform ${userMenuOpen ? "rotate-180" : ""}`} />
+                </button>
 
-                  {dropdownOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-xl border border-black/[0.06] py-1.5 z-50 animate-scale-in">
-                      <div className="px-4 py-3 border-b border-gray-100/80 mb-1">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{session.user.name}</p>
-                        <p className="text-xs text-gray-400 truncate mt-0.5">{session.user.email}</p>
-                        <span className="inline-block mt-1.5 text-[10px] font-semibold bg-brand-50 text-brand-600 px-2 py-0.5 rounded-full">
-                          {isTeacher ? "Teacher" : isSchool ? "School Admin" : "Admin"}
-                        </span>
-                      </div>
-
-                      <Link href={dashboardHref} onClick={() => setDropdownOpen(false)}
-                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors rounded-xl mx-1.5">
-                        <LayoutDashboard size={14} className="text-gray-400" /> Dashboard
-                      </Link>
-                      <Link href="/dashboard/profile" onClick={() => setDropdownOpen(false)}
-                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors rounded-xl mx-1.5">
-                        <User size={14} className="text-gray-400" /> My Profile
-                      </Link>
-                      {session.user.role === "ADMIN" && (
-                        <Link href="/admin" onClick={() => setDropdownOpen(false)}
-                          className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors rounded-xl mx-1.5">
-                          <LayoutDashboard size={14} /> Admin Panel
-                        </Link>
-                      )}
-                      <div className="border-t border-gray-100/80 mt-1 pt-1">
-                        <button
-                          onClick={() => { setDropdownOpen(false); signOut({ callbackUrl: "/" }); }}
-                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors rounded-xl mx-1.5 text-left"
-                          style={{ width: "calc(100% - 12px)" }}
-                        >
-                          <LogOut size={14} /> Sign Out
-                        </button>
-                      </div>
+                {userMenuOpen ? (
+                  <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-2xl border border-[var(--eh-border)] bg-white py-1.5 shadow-xl">
+                    <div className="mb-1 border-b border-[var(--eh-border)] px-4 py-3">
+                      <p className="truncate text-sm font-semibold text-[var(--eh-text)]">{session.user.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-[var(--eh-text-4)]">{session.user.email}</p>
                     </div>
-                  )}
-                </div>
+                    <Link href={dashboardHref} onClick={() => setUserMenuOpen(false)} className="mx-1.5 flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm text-[var(--eh-text-2)] hover:bg-[var(--surface-base)]">
+                      <LayoutDashboard size={14} className="text-[var(--eh-text-4)]" /> {t.nav.dashboard}
+                    </Link>
+                    <Link href="/dashboard/profile" onClick={() => setUserMenuOpen(false)} className="mx-1.5 flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm text-[var(--eh-text-2)] hover:bg-[var(--surface-base)]">
+                      <User size={14} className="text-[var(--eh-text-4)]" /> {isSchool ? t.nav.schoolProfile : t.nav.myProfile}
+                    </Link>
+                    <div className="mt-1 border-t border-[var(--eh-border)] pt-1">
+                      <button
+                        onClick={toggleLang}
+                        className="mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-xl px-4 py-2.5 text-left text-sm text-[var(--eh-text-2)] hover:bg-[var(--surface-base)]"
+                      >
+                        <span className="text-[12px] font-semibold">{lang === "en" ? "தமிழ்" : "EN"}</span>
+                        {lang === "en" ? "Switch to Tamil" : "Switch to English"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          signOut({ callbackUrl: "/" });
+                        }}
+                        className="mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-xl px-4 py-2.5 text-left text-sm text-red-500 hover:bg-red-50"
+                      >
+                        <LogOut size={14} /> {t.nav.signOut}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            )}
+            ) : null}
           </div>
 
-          {/* Mobile hamburger */}
           <button
-            className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 hover:bg-black/[0.05] transition-colors"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--eh-text-2)] transition-colors hover:bg-white/70 md:hidden"
             onClick={() => setMenuOpen(true)}
             aria-label="Open menu"
           >
@@ -244,114 +255,96 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* Mobile drawer */}
-      {menuOpen && (
-        <div
-          className="fixed inset-0 z-[99] bg-black/30 backdrop-blur-sm md:hidden animate-fade-in"
-          onClick={() => setMenuOpen(false)}
-        >
+      {menuOpen ? (
+        <div className="fixed inset-0 z-[99] bg-black/30 backdrop-blur-sm md:hidden" onClick={() => setMenuOpen(false)}>
           <div
-            className="absolute right-0 top-0 bottom-0 w-[300px] bg-white flex flex-col shadow-2xl animate-slide-in-right"
-            onClick={(e) => e.stopPropagation()}
+            className="animate-slide-in-right absolute bottom-0 right-0 top-0 flex w-[320px] flex-col bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 h-[58px] border-b border-gray-100">
-              <span className="font-display text-[17px] font-bold text-gray-900">Menu</span>
+            <div className="flex h-[64px] items-center justify-between border-b border-[var(--eh-border)] px-5">
+              <div>
+                <span className="block font-display text-[18px] font-semibold tracking-[-0.03em] text-[var(--eh-text)]">
+                  {isAuthed ? t.nav.workspace : "EduHire"}
+                </span>
+                <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--eh-text-4)]">
+                  {isAuthed ? t.nav.navigation : t.nav.educationHiring}
+                </span>
+              </div>
               <button
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--eh-text-4)] transition-colors hover:bg-[var(--surface-base)] hover:text-[var(--eh-text-2)]"
                 onClick={() => setMenuOpen(false)}
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-1">
-              {isAuthed && (
-                <div className="flex items-center gap-3 px-3 py-3 mb-2 bg-gray-50 rounded-2xl">
-                  <div className="w-9 h-9 bg-brand-gradient rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                    {initials}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{session?.user.name}</p>
-                    <p className="text-xs text-gray-400 truncate">{session?.user.email}</p>
-                  </div>
+            {!isAuthed ? (
+              <div className="border-b border-[var(--eh-border)] bg-white/95 px-4 py-4 backdrop-blur">
+                <div className="space-y-2">
+                  <Link href="/auth/signup?role=school" onClick={() => setMenuOpen(false)} className="flex w-full items-center justify-center rounded-full bg-[var(--color-brand-600)] px-4 py-3 text-[15px] font-semibold text-white shadow-[0_12px_28px_rgba(31,155,99,0.22)]">
+                    Start hiring
+                  </Link>
+                  <Link href="/jobs" onClick={() => setMenuOpen(false)} className="flex w-full items-center justify-center rounded-full border border-[var(--eh-border)] px-4 py-3 text-[14px] font-semibold text-[var(--eh-text-2)]">
+                    Explore jobs
+                  </Link>
                 </div>
-              )}
+              </div>
+            ) : null}
 
-              {navLinks.map((link) => {
-                const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
-                return (
-                  <Link key={link.href} href={link.href} onClick={() => setMenuOpen(false)}
-                    className={`flex items-center px-4 py-3 rounded-xl text-[15px] font-medium transition-all ${
-                      isActive ? "text-brand-600 bg-brand-50" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                    }`}>
-                    {link.label}
-                  </Link>
-                );
-              })}
-
-              {isAuthed && (
-                <>
-                  <div className="h-px bg-gray-100 my-2" />
-                  <Link href={dashboardHref} onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium text-gray-600 hover:bg-gray-50">
-                    <LayoutDashboard size={16} className="text-gray-400" />
-                    {isSchool ? "My Listings" : "My Applications"}
-                  </Link>
-                  {isSchool && (
-                    <Link href="/dashboard/post-job" onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium text-gray-600 hover:bg-gray-50">
-                      <Plus size={16} className="text-gray-400" />
-                      Post a Job
-                    </Link>
-                  )}
-                  <Link href="/dashboard/profile" onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium text-gray-600 hover:bg-gray-50">
-                    <User size={16} className="text-gray-400" />
-                    {isSchool ? "School Profile" : "My Profile"}
-                  </Link>
-                </>
-              )}
-
-              {!isAuthed && (
-                <>
-                  <div className="h-px bg-gray-100 my-2" />
-                  <p className="px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-widest">Sign in as</p>
-                  <Link href="/auth/signin-teacher" onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium text-gray-600 hover:bg-gray-50">
-                    <span className="text-lg">👨‍🏫</span> Teacher
-                  </Link>
-                  <Link href="/auth/signin-school" onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium text-gray-600 hover:bg-gray-50">
-                    <span className="text-lg">🏫</span> School Admin
-                  </Link>
-                </>
-              )}
-            </div>
-
-            {/* Footer actions */}
-            <div className="p-4 border-t border-gray-100 space-y-2">
-              {showPostCta && (
+            <div className="flex-1 space-y-1 overflow-y-auto p-4">
+              {(isAuthed ? authLinks : publicLinks).map((link) => (
                 <Link
-                  href={isSchool ? "/dashboard/post-job" : "/auth/signup?role=school"}
+                  key={link.href}
+                  href={link.href}
                   onClick={() => setMenuOpen(false)}
-                  className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl text-[15px] font-semibold bg-brand-500 text-white shadow-brand"
+                  className="flex items-center rounded-xl px-4 py-3 text-[15px] font-medium text-[var(--eh-text-2)] hover:bg-[var(--surface-base)] hover:text-[var(--eh-text)]"
                 >
-                  <Plus size={16} /> Post a Job
+                  {link.label}
+                </Link>
+              ))}
+              <div className="my-2 h-px bg-[var(--eh-border)]" />
+              {!isAuthed ? (
+                <>
+                  <Link href="/auth/signin" onClick={() => setMenuOpen(false)} className="flex items-center rounded-xl px-4 py-3 text-[15px] font-medium text-[var(--eh-text-2)] hover:bg-[var(--surface-base)]">
+                    {t.nav.signIn}
+                  </Link>
+                  <Link href="/auth/signup" onClick={() => setMenuOpen(false)} className="flex items-center rounded-xl px-4 py-3 text-[15px] font-medium text-[var(--eh-text-2)] hover:bg-[var(--surface-base)]">
+                    {t.nav.createAccount}
+                  </Link>
+                </>
+              ) : (
+                <Link href="/dashboard/profile" onClick={() => setMenuOpen(false)} className="flex items-center rounded-xl px-4 py-3 text-[15px] font-medium text-[var(--eh-text-2)] hover:bg-[var(--surface-base)]">
+                  {isSchool ? t.nav.schoolProfile : t.nav.myProfile}
                 </Link>
               )}
-              {isAuthed && (
+              <button
+                onClick={() => { toggleLang(); setMenuOpen(false); }}
+                className="flex w-full items-center rounded-xl px-4 py-3 text-[15px] font-medium text-[var(--eh-text-2)] hover:bg-[var(--surface-base)]"
+              >
+                {lang === "en" ? "தமிழில் பார்க்கவும்" : "View in English"}
+              </button>
+            </div>
+
+            <div className="space-y-2 border-t border-[var(--eh-border)] p-4">
+              {!isAuthed ? (
+                <Link href="/auth/signup" onClick={() => setMenuOpen(false)} className="flex w-full items-center justify-center rounded-xl border border-[var(--eh-border)] px-4 py-3 text-[15px] font-semibold text-[var(--eh-text)]">
+                  Create account
+                </Link>
+              ) : (
                 <button
-                  onClick={() => { setMenuOpen(false); signOut({ callbackUrl: "/" }); }}
-                  className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl text-[15px] font-medium text-red-500 hover:bg-red-50 transition-colors"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    signOut({ callbackUrl: "/" });
+                  }}
+                  className="flex w-full items-center justify-center rounded-xl px-4 py-3 text-[15px] font-medium text-red-500 transition-colors hover:bg-red-50"
                 >
-                  <LogOut size={16} /> Sign Out
+                  Sign out
                 </button>
               )}
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </>
   );
 }

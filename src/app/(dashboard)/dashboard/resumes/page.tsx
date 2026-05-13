@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
 import Spinner from '@/components/ui/spinner';
+import { getApiErrorMessage } from '@/lib/api/client';
+import { deleteResume as apiDeleteResume } from '@/lib/api/teacher-client';
+import { getSchoolProfile } from '@/lib/api/school-client';
 
 interface Resume {
   id: string;
@@ -37,26 +40,18 @@ const TEMPLATES = [
 
 export default function ResumesPage() {
   const [resumes, setResumes] = useState<Resume[]>([]);
-  const [loading, setLoading] = useState(false);
   const [generatingTemplate, setGeneratingTemplate] = useState<string | null>(null);
   const [progress, setProgress] = useState<number>(0);
   const [progressMessage, setProgressMessage] = useState<string>('');
   const [activeTab, setActiveTab] = useState('generate');
 
-  // Fetch resumes
   useEffect(() => {
-    async function fetchResumes() {
-      try {
-        const res = await fetch('/api/profile');
-        const data = await res.json();
-        if (data.success && data.data.resumes) {
-          setResumes(data.data.resumes);
-        }
-      } catch (error) {
-        console.error('Failed to fetch resumes:', error);
-      }
-    }
-    fetchResumes();
+    getSchoolProfile()
+      .then((data) => {
+        const profile = data as unknown as { resumes?: Resume[] };
+        if (profile.resumes) setResumes(profile.resumes);
+      })
+      .catch(() => {});
   }, []);
 
   // Generate resume with real progress tracking
@@ -118,7 +113,7 @@ export default function ResumesPage() {
       await new Promise(resolve => setTimeout(resolve, 200));
 
       if (resumeData) {
-        setResumes([resumeData, ...resumes]);
+        setResumes((current) => [resumeData, ...current]);
         alert(`✓ ${template} resume generated!`);
         setActiveTab('library');
       } else {
@@ -153,21 +148,11 @@ export default function ResumesPage() {
     }
 
     try {
-      const res = await fetch(`/api/resumes/${id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setResumes(resumes.filter((r) => r.id !== id));
-        alert('✓ Resume deleted');
-      } else {
-        alert(`Error: ${data.error}`);
-      }
+      await apiDeleteResume(id);
+      setResumes(resumes.filter((r) => r.id !== id));
+      alert('✓ Resume deleted');
     } catch (error) {
-      alert('Failed to delete resume');
-      console.error(error);
+      alert(getApiErrorMessage(error, 'Failed to delete resume'));
     }
   }
 

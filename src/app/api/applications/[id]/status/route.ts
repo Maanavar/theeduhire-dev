@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 import { updateApplicationStatusSchema } from "@/lib/validators/application";
-import { sendStatusUpdate } from "@/lib/email";
+import { canManageApplication } from "@/lib/policies/application-policy";
+import {
+  beginIdempotentRequest,
+  completeIdempotentRequest,
+  getIdempotencyKey,
+  releaseIdempotentRequest,
+  stableHash,
+} from "@/lib/idempotency";
+import { publishDomainEvent } from "@/lib/domain-events";
+import { cacheTags } from "@/lib/cache-tags";
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let idempotencyRecordId: string | null = null;
+
   try {
     const auth = await requireAuth(["SCHOOL_ADMIN", "ADMIN"]);
     if ("error" in auth) {
@@ -21,6 +33,30 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: parsed.error.errors[0]?.message }, { status: 400 });
     }
 
+    const requestHash = stableHash({
+      applicationId: id,
+      status: parsed.data.status,
+      schoolNotes: parsed.data.schoolNotes ?? null,
+      rejectionReason: parsed.data.rejectionReason ?? null,
+      note: parsed.data.note ?? null,
+    });
+    const idempotency = await beginIdempotentRequest(prisma, {
+      scope: "applications.status",
+      actorKey: auth.user.id,
+      key: getIdempotencyKey(req.headers.get("idempotency-key"), requestHash),
+      requestHash,
+    });
+
+    if (idempotency.kind === "replay") {
+      return NextResponse.json(idempotency.responseBody, { status: idempotency.responseStatus });
+    }
+
+    if (idempotency.kind === "conflict") {
+      return NextResponse.json({ success: false, error: idempotency.error }, { status: idempotency.status });
+    }
+
+    idempotencyRecordId = idempotency.recordId;
+
     const application = await prisma.application.findUnique({
       where: { id },
       include: {
@@ -29,6 +65,7 @@ export async function PATCH(
             id: true,
             title: true,
             postedBy: true,
+            schoolId: true,
             school: { select: { schoolName: true } },
           },
         },
@@ -39,15 +76,25 @@ export async function PATCH(
     });
 
     if (!application) {
-      return NextResponse.json({ success: false, error: "Application not found" }, { status: 404 });
-    }
-    if (application.job.postedBy !== auth.user.id && auth.user.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
+      const responseBody = { success: false, error: "Application not found" };
+      await completeIdempotentRequest(prisma, idempotency.recordId, 404, responseBody);
+      return NextResponse.json(responseBody, { status: 404 });
     }
 
-    // Atomic transaction: update application + create status history
-    const [updated] = await prisma.$transaction([
-      prisma.application.update({
+    const authorized = await canManageApplication(prisma, auth.user, {
+      job: {
+        postedBy: application.job.postedBy,
+        schoolId: application.job.schoolId,
+      },
+    });
+    if (!authorized) {
+      const responseBody = { success: false, error: "Not authorized" };
+      await completeIdempotentRequest(prisma, idempotency.recordId, 403, responseBody);
+      return NextResponse.json(responseBody, { status: 403 });
+    }
+
+    const updated = await prisma.$transaction(async (tx: any) => {
+      const nextApplication = await tx.application.update({
         where: { id },
         data: {
           status: parsed.data.status,
@@ -55,8 +102,9 @@ export async function PATCH(
           rejectionReason: parsed.data.rejectionReason ?? undefined,
           reviewedAt: application.reviewedAt ?? new Date(),
         },
-      }),
-      prisma.applicationStatusHistory.create({
+      });
+
+      await tx.applicationStatusHistory.create({
         data: {
           applicationId: id,
           fromStatus: application.status,
@@ -65,21 +113,39 @@ export async function PATCH(
           note: parsed.data.note,
           rejectionReason: parsed.data.rejectionReason ?? undefined,
         },
-      }),
-    ]);
+      });
 
-    // Send status update email non-blocking
-    sendStatusUpdate({
-      teacherEmail: application.applicant.email,
-      teacherName: application.applicant.name,
-      jobTitle: application.job.title,
-      schoolName: application.job.school.schoolName,
-      newStatus: parsed.data.status,
-      jobId: application.job.id,
-    }).catch((err) => console.error("Status email error:", err));
+      await publishDomainEvent(tx, {
+        eventType: "application_status_changed",
+        aggregateType: "application",
+        aggregateId: application.id,
+        actorId: auth.user.id,
+        payload: {
+          applicationId: application.id,
+          jobId: application.job.id,
+          applicantId: application.applicantId,
+          fromStatus: application.status,
+          toStatus: parsed.data.status,
+          rejectionReason: parsed.data.rejectionReason ?? null,
+          note: parsed.data.note ?? null,
+        },
+        metadata: {
+          source: "api.applications.status",
+        },
+      });
 
-    return NextResponse.json({ success: true, data: updated });
+      return nextApplication;
+    });
+
+    const responseBody = { success: true, data: updated };
+    await completeIdempotentRequest(prisma, idempotency.recordId, 200, responseBody);
+    revalidateTag(cacheTags.schoolAnalytics(application.job.schoolId));
+
+    return NextResponse.json(responseBody);
   } catch (error) {
+    if (idempotencyRecordId) {
+      await releaseIdempotentRequest(prisma, idempotencyRecordId);
+    }
     console.error("PATCH /api/applications/[id]/status error:", error);
     return NextResponse.json({ success: false, error: "Failed to update status" }, { status: 500 });
   }

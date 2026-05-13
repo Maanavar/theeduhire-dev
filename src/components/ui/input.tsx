@@ -18,14 +18,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-sm font-semibold text-gray-700 mb-1.5"
+            className="mb-1.5 block text-[13px] font-semibold text-[var(--eh-text-2)]"
           >
             {label}
           </label>
         )}
         <div className="relative">
           {leftIcon && (
-            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+            <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--eh-text-4)]">
               {leftIcon}
             </div>
           )}
@@ -57,7 +57,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           </p>
         )}
         {hint && !error && (
-          <p className="mt-1.5 text-xs text-gray-400">{hint}</p>
+          <p className="mt-1.5 text-xs text-[var(--eh-text-4)]">{hint}</p>
         )}
       </div>
     );

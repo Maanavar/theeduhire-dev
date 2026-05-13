@@ -12,6 +12,7 @@ export interface MatchBreakdown {
   board: number;
   salary: number;
   experience: number;
+  tet: number;
 }
 
 export interface MatchResult {
@@ -136,6 +137,12 @@ function scoreExperience(
   return 0; // teacher too junior
 }
 
+function scoreTet(teacherTet: string | null | undefined, jobRequiresTet: boolean | null | undefined): number {
+  if (!jobRequiresTet) return 1.0;
+  if (!teacherTet || teacherTet === "NONE") return 0.0;
+  return 1.0;
+}
+
 /**
  * Compute match score between a teacher and a job
  * Pure function — no side effects, deterministic
@@ -150,14 +157,16 @@ export function computeMatchScore(
   const board = scoreBoard(teacher.preferredBoards || [], job.board);
   const salary = scoreSalary(teacher.expectedSalary, job.salaryMin, job.salaryMax);
   const experience = scoreExperience(teacher.experience, job.experience);
+  const tet = scoreTet((teacher as TeacherProfile & { tetStatus?: string | null }).tetStatus, (job as JobPosting & { requiresTet?: boolean | null }).requiresTet);
 
   // Weights
   const weights = {
-    subject: 0.4,
+    subject: 0.35,
     location: 0.2,
-    board: 0.2,
+    board: 0.15,
     salary: 0.1,
     experience: 0.1,
+    tet: 0.1,
   };
 
   // Weighted average
@@ -166,7 +175,8 @@ export function computeMatchScore(
     location * weights.location +
     board * weights.board +
     salary * weights.salary +
-    experience * weights.experience;
+    experience * weights.experience +
+    tet * weights.tet;
 
   // Generate explanation
   const reasons: string[] = [];
@@ -186,6 +196,9 @@ export function computeMatchScore(
   if (salary > 0.5) {
     reasons.push(`salary alignment`);
   }
+  if ((job as JobPosting & { requiresTet?: boolean | null }).requiresTet && tet === 0) {
+    reasons.push("Missing: TET/CTET certificate required for this role");
+  }
 
   const explanation =
     reasons.length > 0
@@ -195,7 +208,7 @@ export function computeMatchScore(
   return {
     score: Math.max(0, Math.min(1, score)), // clamp to [0, 1]
     scorePercent: Math.round(Math.max(0, Math.min(1, score)) * 100),
-    breakdown: { subject, location, board, salary, experience },
+    breakdown: { subject, location, board, salary, experience, tet },
     explanation,
   };
 }

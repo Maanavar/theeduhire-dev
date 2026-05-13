@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       },
       include: {
         user: {
-          select: { id: true, email: true, name: true },
+          select: { id: true, email: true, name: true, whatsappNumber: true, whatsappOptin: true },
         },
       },
     });
@@ -105,6 +105,10 @@ export async function POST(req: NextRequest) {
           jobs: jobsForEmail,
           frequency: alert.frequency,
         });
+
+        if (alert.user.whatsappOptin && alert.user.whatsappNumber) {
+          console.log(`[WhatsApp stub] Would send to ${alert.user.whatsappNumber}: ${alert.name}`);
+        }
 
         // Log to AlertHistory
         await prisma.alertHistory.create({

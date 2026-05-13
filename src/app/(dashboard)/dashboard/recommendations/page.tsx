@@ -1,12 +1,27 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, Sparkles, TrendingUp } from 'lucide-react';
-import { RecommendationCard } from '@/components/recommendations/recommendation-card';
-import JobDetailModal from '@/components/jobs/job-detail-modal';
+import {
+  AlertCircle,
+  ArrowRight,
+  BriefcaseBusiness,
+  CheckCircle2,
+  MapPin,
+  Search,
+  SlidersHorizontal,
+  TrendingUp,
+} from 'lucide-react';
+import JobDetailPanel from '@/components/jobs/job-detail-panel';
+import { MatchScoreBadge } from '@/components/recommendations/match-score-badge';
+import { EmptyState, ErrorState, LoadingState } from '@/components/system/system-states';
 import type { JobRecommendation } from '@/types';
+import { getApiErrorMessage } from '@/lib/api/client';
+import { getRecommendations } from '@/lib/api/teacher-client';
+
+type SortMode = 'score' | 'recent' | 'salary';
 
 export default function RecommendationsPage() {
   const { data: session } = useSession();
@@ -14,14 +29,12 @@ export default function RecommendationsPage() {
   const [recommendations, setRecommendations] = useState<JobRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'score' | 'recent' | 'salary'>('score');
-  const [filterSubject, setFilterSubject] = useState<string>('');
-  const [filterBoard, setFilterBoard] = useState<string>('');
+  const [sortBy, setSortBy] = useState<SortMode>('score');
+  const [filterSubject, setFilterSubject] = useState('');
+  const [filterBoard, setFilterBoard] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const selectedJob = recommendations.find(r => r.id === selectedJobId);
 
-  // Redirect non-teachers
   useEffect(() => {
     if (session && session.user.role !== 'TEACHER') {
       router.push('/dashboard');
@@ -35,47 +48,39 @@ export default function RecommendationsPage() {
   async function fetchRecommendations() {
     try {
       setLoading(true);
-      const res = await fetch('/api/ai/recommendations');
-      const data = await res.json();
-
-      if (!data.success) {
-        setError(data.error || 'Failed to fetch recommendations');
-        return;
-      }
-
-      setRecommendations(data.data || []);
+      setError(null);
+      const nextRecommendations = await getRecommendations();
+      setRecommendations(nextRecommendations);
+      setSelectedJobId((current) => current || nextRecommendations[0]?.id || null);
     } catch (err) {
-      console.error('Failed to fetch recommendations:', err);
-      setError('Failed to fetch recommendations');
+      setError(getApiErrorMessage(err, 'Failed to fetch recommendations'));
     } finally {
       setLoading(false);
     }
   }
 
-  // Get unique subjects and boards for filters
-  const subjects = useMemo(() =>
-    [...new Set(recommendations.map(r => r.subject).filter(Boolean))].sort(),
+  const subjects = useMemo(
+    () => [...new Set(recommendations.map((r) => r.subject).filter(Boolean))].sort(),
     [recommendations]
   );
 
-  const boards = useMemo(() =>
-    [...new Set(recommendations.map(r => r.board).filter(Boolean))].sort(),
+  const boards = useMemo(
+    () => [...new Set(recommendations.map((r) => r.board).filter(Boolean))].sort(),
     [recommendations]
   );
 
-  // Filter and sort recommendations
   const filteredRecommendations = useMemo(() => {
-    let filtered = recommendations.filter(rec => {
+    const filtered = recommendations.filter((rec) => {
       const matchesSearch =
         rec.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        rec.school.schoolName.toLowerCase().includes(searchTerm.toLowerCase());
+        rec.school.schoolName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        rec.school.city.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesSubject = !filterSubject || rec.subject === filterSubject;
       const matchesBoard = !filterBoard || rec.board === filterBoard;
 
       return matchesSearch && matchesSubject && matchesBoard;
     });
 
-    // Sort
     if (sortBy === 'score') {
       filtered.sort((a, b) => b.matchScore - a.matchScore);
     } else if (sortBy === 'recent') {
@@ -87,149 +92,327 @@ export default function RecommendationsPage() {
     return filtered;
   }, [recommendations, filterSubject, filterBoard, searchTerm, sortBy]);
 
+  useEffect(() => {
+    if (filteredRecommendations.length === 0) {
+      setSelectedJobId(null);
+      return;
+    }
+
+    if (!selectedJobId || !filteredRecommendations.some((rec) => rec.id === selectedJobId)) {
+      setSelectedJobId(filteredRecommendations[0].id);
+    }
+  }, [filteredRecommendations, selectedJobId]);
+
+  const selectedRecommendation =
+    filteredRecommendations.find((rec) => rec.id === selectedJobId) || filteredRecommendations[0] || null;
+
+  const avgMatch = filteredRecommendations.length
+    ? Math.round(filteredRecommendations.reduce((sum, rec) => sum + rec.matchScore, 0) / filteredRecommendations.length)
+    : 0;
+
   if (loading) {
+    return <LoadingState title="Loading recommendations" message="Scoring teaching roles against your profile." />;
+  }
+
+  if (error) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Job Recommendations</h1>
-          <p className="text-gray-600 mt-2">Personalized job matches based on your profile</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-80 bg-gray-100 rounded-xl animate-pulse" />
-          ))}
-        </div>
-      </div>
+      <ErrorState
+        title="Failed to load recommendations"
+        message={error}
+        actions={
+          <button
+            onClick={fetchRecommendations}
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-600"
+          >
+            Try again
+          </button>
+        }
+      />
+    );
+  }
+
+  if (recommendations.length === 0) {
+    return (
+      <EmptyState
+        title="No recommendations yet"
+        message="Complete your profile to receive personalized job recommendations."
+        actions={
+          <Link
+            href="/dashboard/profile"
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600"
+          >
+            Complete profile <ArrowRight size={14} />
+          </Link>
+        }
+      />
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2.5 bg-brand-50 rounded-lg">
-            <Sparkles className="w-6 h-6 text-brand-600" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Job Recommendations</h1>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-[26px] font-semibold tracking-[-0.02em] text-[#111827]">Recommendations</h1>
+          <p className="text-[14px] text-slate-500">
+            Your best-fit teaching roles, ranked by subject, board, and preference overlap.
+          </p>
         </div>
-        <p className="text-gray-600 mt-2">
-          Personalized job matches based on your profile and preferences
-        </p>
+        <Link href="/dashboard/jobs" className="eh-btn eh-btn-secondary">
+          <BriefcaseBusiness size={14} /> Browse all jobs
+        </Link>
       </div>
 
-      {/* Error Alert */}
-      {error && (
-        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
-      )}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Matched roles" value={String(filteredRecommendations.length)} helper={`${recommendations.length} total scored`} />
+        <StatCard label="Top match" value={`${filteredRecommendations[0]?.matchScore || 0}%`} helper={filteredRecommendations[0]?.school.schoolName || 'No role selected'} />
+        <StatCard label="Average fit" value={`${avgMatch}%`} helper="Across current filters" />
+        <StatCard label="Coverage" value={`${subjects.length} subjects`} helper={`${boards.length} boards represented`} />
+      </div>
 
-      {/* Empty State */}
-      {!error && recommendations.length === 0 && (
-        <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-amber-900">No recommendations yet</p>
-            <p className="text-sm text-amber-700 mt-1">Complete your profile to receive personalized job recommendations</p>
-          </div>
+      <div className="rounded-2xl border border-[#e7ebf2] bg-white p-4">
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">
+          <SlidersHorizontal size={14} />
+          Refine matches
         </div>
-      )}
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,0.7fr))]">
+          <label className="flex items-center gap-2 rounded-[10px] border border-[#e6ebf3] bg-[#f8fafc] px-3 py-2">
+            <Search size={15} className="text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by job, school, or city"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full border-0 bg-transparent text-[14px] text-slate-700 outline-none placeholder:text-slate-400"
+            />
+          </label>
 
-      {/* Filters & Sort (shown only if recommendations exist) */}
-      {recommendations.length > 0 && (
-        <div className="card p-4 space-y-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                placeholder="Search by job title or school..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-              />
+          <select
+            value={filterSubject}
+            onChange={(e) => setFilterSubject(e.target.value)}
+            className="rounded-[10px] border border-[#e6ebf3] bg-white px-3 py-2 text-[14px] text-slate-700 outline-none"
+          >
+            <option value="">All subjects</option>
+            {subjects.map((subject) => (
+              <option key={subject} value={subject}>
+                {subject}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filterBoard}
+            onChange={(e) => setFilterBoard(e.target.value)}
+            className="rounded-[10px] border border-[#e6ebf3] bg-white px-3 py-2 text-[14px] text-slate-700 outline-none"
+          >
+            <option value="">All boards</option>
+            {boards.map((board) => (
+              <option key={board} value={board}>
+                {board}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortMode)}
+            className="rounded-[10px] border border-[#e6ebf3] bg-white px-3 py-2 text-[14px] text-slate-700 outline-none"
+          >
+            <option value="score">Best match</option>
+            <option value="recent">Most recent</option>
+            <option value="salary">Highest salary</option>
+          </select>
+        </div>
+      </div>
+
+      {filteredRecommendations.length === 0 ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+          No roles match the current filters. Try widening subject, board, or search terms.
+        </div>
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <section className="overflow-hidden rounded-2xl border border-[#e7ebf2] bg-white">
+            <div className="border-b border-[#edf1f6] px-4 py-3">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-slate-400">Curated for you</p>
+              <p className="mt-1 text-[13px] text-slate-500">
+                Showing {filteredRecommendations.length} ranked recommendation{filteredRecommendations.length === 1 ? '' : 's'}.
+              </p>
             </div>
 
-            {/* Subject Filter */}
-            <select
-              value={filterSubject}
-              onChange={(e) => setFilterSubject(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm bg-white"
-            >
-              <option value="">All Subjects</option>
-              {subjects.map(subject => (
-                <option key={subject} value={subject}>{subject}</option>
-              ))}
-            </select>
+            <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
+              {filteredRecommendations.map((rec) => {
+                const active = selectedRecommendation?.id === rec.id;
+                return (
+                  <button
+                    key={rec.id}
+                    type="button"
+                    onClick={() => setSelectedJobId(rec.id)}
+                    className={[
+                      'w-full border-b border-[#edf1f6] px-4 py-4 text-left transition-colors last:border-b-0',
+                      active ? 'bg-[#eef2ff]' : 'hover:bg-[#f8fafd]',
+                    ].join(' ')}
+                  >
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-[14px] font-semibold text-slate-900">{rec.title}</p>
+                        <p className="truncate text-[12px] text-slate-500">{rec.school.schoolName}</p>
+                      </div>
+                      <span className="rounded-full border border-[#d7dcfa] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#4f46e5]">
+                        {rec.matchScore}%
+                      </span>
+                    </div>
 
-            {/* Board Filter */}
-            <select
-              value={filterBoard}
-              onChange={(e) => setFilterBoard(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm bg-white"
-            >
-              <option value="">All Boards</option>
-              {boards.map(board => (
-                <option key={board} value={board}>{board}</option>
-              ))}
-            </select>
+                    <div className="mb-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#f8fafc] px-2 py-0.5">
+                        <MapPin size={11} />
+                        {rec.school.city}
+                      </span>
+                      <span className="rounded-full bg-[#f8fafc] px-2 py-0.5">{rec.subject}</span>
+                      <span className="rounded-full bg-[#f8fafc] px-2 py-0.5">{rec.board}</span>
+                    </div>
 
-            {/* Sort */}
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm bg-white"
-            >
-              <option value="score">Best Match</option>
-              <option value="recent">Most Recent</option>
-              <option value="salary">Highest Salary</option>
-            </select>
-          </div>
+                    <p className="line-clamp-2 text-[12px] leading-5 text-slate-600">{rec.explanation}</p>
+                    {rec.breakdown ? (
+                      <div className="mt-3 space-y-1.5">
+                        {[
+                          { label: 'Subject', value: rec.breakdown.subject },
+                          { label: 'Location', value: rec.breakdown.location },
+                          { label: 'Board', value: rec.breakdown.board },
+                          { label: 'Salary', value: rec.breakdown.salary },
+                          { label: 'Experience', value: rec.breakdown.experience },
+                          ...(typeof rec.breakdown.tet === 'number' ? [{ label: 'TET', value: rec.breakdown.tet }] : []),
+                        ].map(({ label, value }) => (
+                          <div key={label} className="flex items-center gap-2">
+                            <span className="w-16 text-[11px] text-slate-400">{label}</span>
+                            <div className="h-1.5 flex-1 rounded-full bg-slate-100">
+                              <div
+                                className="h-1.5 rounded-full bg-[#4f46e5]"
+                                style={{ width: `${Math.round(value * 100)}%` }}
+                              />
+                            </div>
+                            <span className="w-8 text-right text-[11px] text-slate-500">
+                              {Math.round(value * 100)}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
 
-          {/* Results info */}
-          {filteredRecommendations.length > 0 && (
-            <div className="flex items-center justify-between text-sm text-gray-600 pt-2 border-t border-gray-200">
-              <span>Showing {filteredRecommendations.length} of {recommendations.length} jobs</span>
-              {filteredRecommendations.length > 0 && (
-                <div className="flex items-center gap-1 text-brand-600 font-medium">
-                  <TrendingUp className="w-4 h-4" />
-                  Top match: {filteredRecommendations[0].matchScore}%
+          <section className="space-y-4">
+            {selectedRecommendation ? (
+              <div className="rounded-2xl border border-[#e7ebf2] bg-white p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#4f46e5]">Selected match</p>
+                    <h2 className="mt-1 text-[28px] font-semibold tracking-[-0.02em] text-slate-900">
+                      {selectedRecommendation.title}
+                    </h2>
+                    <p className="mt-1 text-[14px] text-slate-500">
+                      {selectedRecommendation.school.schoolName} / {selectedRecommendation.school.city}
+                    </p>
+                    <div className="mt-3 inline-flex items-start gap-2 rounded-2xl bg-[#f8fafc] px-3 py-2 text-[13px] text-slate-600">
+                      <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-[#4f46e5]" />
+                      <span>{selectedRecommendation.explanation || 'This role aligns well with your current profile.'}</span>
+                    </div>
+                  </div>
+                  <MatchScoreBadge score={selectedRecommendation.matchScore} />
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2 text-[12px]">
+                  <span className="rounded-full bg-[#eef2ff] px-2.5 py-1 font-semibold text-[#4f46e5]">
+                    {selectedRecommendation.subject}
+                  </span>
+                  <span className="rounded-full bg-[#f8fafc] px-2.5 py-1 text-slate-600">
+                    {selectedRecommendation.board}
+                  </span>
+                  <span className="rounded-full bg-[#f8fafc] px-2.5 py-1 text-slate-600">
+                    Grade {selectedRecommendation.gradeLevel}
+                  </span>
+                  <span className="rounded-full bg-[#f8fafc] px-2.5 py-1 text-slate-600">
+                    {selectedRecommendation.jobType.replace(/_/g, ' ')}
+                  </span>
+                </div>
+
+                {selectedRecommendation.breakdown ? (
+                  <div className="mt-4 rounded-2xl border border-[#e7ebf2] bg-[#f8fafc] p-4">
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-slate-400">Fit breakdown</p>
+                    <div className="mt-3 space-y-2">
+                      {[
+                        { label: 'Subject', value: selectedRecommendation.breakdown.subject },
+                        { label: 'Location', value: selectedRecommendation.breakdown.location },
+                        { label: 'Board', value: selectedRecommendation.breakdown.board },
+                        { label: 'Salary', value: selectedRecommendation.breakdown.salary },
+                        { label: 'Experience', value: selectedRecommendation.breakdown.experience },
+                        ...(typeof selectedRecommendation.breakdown.tet === 'number' ? [{ label: 'TET', value: selectedRecommendation.breakdown.tet }] : []),
+                      ].map(({ label, value }) => (
+                        <div key={label} className="flex items-center gap-3">
+                          <span className="w-20 text-[12px] font-medium text-slate-500">{label}</span>
+                          <div className="h-2 flex-1 rounded-full bg-white">
+                            <div
+                              className="h-2 rounded-full bg-[#4f46e5]"
+                              style={{ width: `${Math.round(value * 100)}%` }}
+                            />
+                          </div>
+                          <span className="w-10 text-right text-[12px] font-semibold text-slate-700">
+                            {Math.round(value * 100)}%
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="overflow-hidden rounded-2xl border border-[#e7ebf2] bg-white">
+              {selectedRecommendation ? (
+                <JobDetailPanel jobId={selectedRecommendation.id} />
+              ) : (
+                <div className="flex min-h-[320px] items-center justify-center text-slate-500">
+                  Select a recommendation to view full role details.
                 </div>
               )}
             </div>
-          )}
+
+            <div className="rounded-2xl border border-[#e7ebf2] bg-white p-4">
+              <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-900">
+                <TrendingUp size={15} className="text-[#4f46e5]" />
+                Match notes
+              </div>
+              <p className="mt-2 text-[13px] leading-6 text-slate-600">
+                Recommendations improve as your profile gets richer. Add subjects, preferred boards, city, and experience
+                details to sharpen the ranking.
+              </p>
+              <Link href="/dashboard/profile" className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-[#4f46e5] hover:text-[#3730a3]">
+                Improve profile <ArrowRight size={13} />
+              </Link>
+            </div>
+          </section>
         </div>
       )}
 
-      {/* No results */}
-      {recommendations.length > 0 && filteredRecommendations.length === 0 && (
-        <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-700">No jobs match your filters. Try adjusting your search.</p>
+      <div className="rounded-2xl border border-[#e7ebf2] bg-white p-4">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="mt-0.5 h-4 w-4 text-slate-400" />
+          <p className="text-[13px] text-slate-500">
+            Prefer manual browsing too? Open the full jobs explorer for every active role, not just AI-ranked ones.
+          </p>
         </div>
-      )}
+      </div>
+    </div>
+  );
+}
 
-      {/* Recommendations Grid */}
-      {filteredRecommendations.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredRecommendations.map((rec) => (
-            <RecommendationCard 
-              key={rec.id} 
-              recommendation={rec}
-              onClick={() => setSelectedJobId(rec.id)}
-            />
-          ))}
-        </div>
-      )}
-      <JobDetailModal
-        open={!!selectedJobId}
-        jobId={selectedJobId}
-        onClose={() => setSelectedJobId(null)}
-        jobTitle={selectedJob?.title}
-      />
-
+function StatCard({ label, value, helper }: { label: string; value: string; helper: string }) {
+  return (
+    <div className="rounded-2xl border border-[#e7ebf2] bg-white p-4">
+      <p className="text-[12px] font-medium text-slate-500">{label}</p>
+      <p className="mt-1 text-[42px] font-semibold leading-none tracking-[-0.03em] text-slate-900">{value}</p>
+      <p className="mt-1 text-[12px] text-slate-500">{helper}</p>
     </div>
   );
 }

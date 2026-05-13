@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "./auth";
 import type { UserRole } from "@prisma/client";
+import { prisma } from "./prisma";
 
 // Get typed session on server
 export async function getSession() {
@@ -13,6 +14,42 @@ export async function requireAuth(allowedRoles?: UserRole[]) {
 
   if (!session?.user) {
     return { error: "Authentication required", status: 401 as const };
+  }
+
+  // Enforce server-side session revocation checks for JWT sessions.
+  const sessionToken = session.user.sessionToken;
+  if (!sessionToken) {
+    return { error: "Session is invalid. Please sign in again.", status: 401 as const };
+  }
+
+  const db = prisma as any;
+  const activeSession = await db.userSession.findFirst({
+    where: {
+      userId: session.user.id,
+      sessionToken,
+      revokedAt: null,
+    },
+    select: { id: true },
+  });
+
+  if (!activeSession) {
+    return { error: "Session was revoked. Please sign in again.", status: 401 as const };
+  }
+
+  const accountState = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      isSuspended: true,
+      suspendedUntil: true,
+    },
+  });
+
+  const suspensionActive =
+    !!accountState?.isSuspended &&
+    (!accountState.suspendedUntil || accountState.suspendedUntil.getTime() > Date.now());
+
+  if (suspensionActive) {
+    return { error: "Your account is temporarily unavailable. Please contact EduHire support.", status: 403 as const };
   }
 
   if (allowedRoles && !allowedRoles.includes(session.user.role)) {

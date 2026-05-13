@@ -1,5 +1,5 @@
-// POST /api/notifications/send — internal notification router
-// Delegates to email (Resend) — SMS/WhatsApp via MSG91 can be added later
+// POST /api/notifications/send - internal notification router
+// Delegates to email (Resend) - SMS/WhatsApp via MSG91 can be added later
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";

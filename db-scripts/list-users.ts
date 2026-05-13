@@ -1,12 +1,10 @@
-// List all users from the database
 import { PrismaClient, UserRole } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("📋 EduHire Users\n");
-  console.log("Default Password: eduhire2026\n");
-  console.log("═".repeat(90));
+  console.log("EduHire Users\n");
+  console.log("=".repeat(90));
 
   const users = await prisma.user.findMany({
     select: {
@@ -19,7 +17,6 @@ async function main() {
     orderBy: { role: "asc" },
   });
 
-  // Group by role
   const byRole = users.reduce(
     (acc, user) => {
       if (!acc[user.role]) acc[user.role] = [];
@@ -29,20 +26,18 @@ async function main() {
     {} as Record<string, typeof users>
   );
 
-  // Display ADMIN
   if (byRole[UserRole.ADMIN]) {
-    console.log("\n🔐 ADMIN\n");
-    byRole[UserRole.ADMIN].forEach((user) => {
+    console.log("\nADMIN\n");
+    for (const user of byRole[UserRole.ADMIN]) {
       console.log(`  ID:    ${user.id}`);
       console.log(`  Email: ${user.email}`);
       console.log(`  Name:  ${user.name}`);
       console.log();
-    });
+    }
   }
 
-  // Display SCHOOL_ADMIN
   if (byRole[UserRole.SCHOOL_ADMIN]) {
-    console.log("🏫 SCHOOL ADMINS\n");
+    console.log("SCHOOL ADMINS\n");
     byRole[UserRole.SCHOOL_ADMIN].forEach((user, idx) => {
       console.log(`  ${idx + 1}. ${user.name}`);
       console.log(`     ID:    ${user.id}`);
@@ -52,9 +47,8 @@ async function main() {
     });
   }
 
-  // Display TEACHER
   if (byRole[UserRole.TEACHER]) {
-    console.log("👨‍🏫 TEACHERS\n");
+    console.log("TEACHERS\n");
     byRole[UserRole.TEACHER].forEach((user, idx) => {
       console.log(`  ${idx + 1}. ${user.name}`);
       console.log(`     ID:    ${user.id}`);
@@ -64,7 +58,7 @@ async function main() {
     });
   }
 
-  console.log("═".repeat(90));
+  console.log("=".repeat(90));
   console.log(`\nTotal Users: ${users.length}`);
   console.log(`  - Admins: ${byRole[UserRole.ADMIN]?.length || 0}`);
   console.log(`  - School Admins: ${byRole[UserRole.SCHOOL_ADMIN]?.length || 0}`);
@@ -72,8 +66,8 @@ async function main() {
 }
 
 main()
-  .catch((e) => {
-    console.error("❌ Error:", e);
+  .catch((error) => {
+    console.error("Error:", error);
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());

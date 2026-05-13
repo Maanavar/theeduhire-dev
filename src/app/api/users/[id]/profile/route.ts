@@ -4,10 +4,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -81,6 +80,14 @@ export async function GET(
         preferredGrades: profile.preferredGrades,
         expectedSalary: profile.expectedSalary,
         availabilityStatus: profile.availabilityStatus,
+        preferredJobTypes: profile.preferredJobTypes,
+        noticePeriodDays: profile.noticePeriodDays,
+        tetStatus: profile.tetStatus,
+        teachingMediums: profile.teachingMediums,
+        pocsoAcknowledged: profile.pocsoAcknowledged,
+        referenceCheckDone: profile.referenceCheckDone,
+        codeOfConductSigned: profile.codeOfConductSigned,
+        safetyBadgeGranted: profile.safetyBadgeGranted,
         experiences: profile.experiences,
         certifications: profile.certifications,
       },

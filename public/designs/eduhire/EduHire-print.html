@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>EduHire — Print</title>
+<link rel="preconnect" href="https://rsms.me/"/>
+<link rel="stylesheet" href="https://rsms.me/inter/inter.css"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap"/>
+<link rel="stylesheet" href="eduhire.css"/>
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; font-family: var(--eh-font-sans); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  .page {
+    width: 1440px;
+    margin: 0 auto 32px;
+    background: #fff;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+    overflow: hidden;
+    position: relative;
+  }
+  .page-label {
+    position: absolute; top: 12px; left: 16px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+    color: rgba(0,0,0,0.55); text-transform: uppercase;
+    background: rgba(255,255,255,0.7); backdrop-filter: blur(8px);
+    padding: 4px 10px; border-radius: 999px; z-index: 100;
+    pointer-events: none;
+  }
+  .page-frame { width: 100%; height: 100%; overflow: hidden; position: relative; }
+
+  .cover {
+    width: 1440px; height: 900px;
+    margin: 0 auto 32px;
+    background: linear-gradient(135deg, #312e81 0%, #4f46e5 60%, #6366f1 100%);
+    color: white;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 0 96px;
+    position: relative;
+    overflow: hidden;
+  }
+  .cover::before {
+    content: ""; position: absolute; inset: 0;
+    background:
+      radial-gradient(40% 60% at 80% 20%, rgba(255,255,255,0.18), transparent 60%),
+      radial-gradient(50% 50% at 20% 90%, rgba(255,255,255,0.08), transparent 60%);
+  }
+  .cover-eyebrow { font-size: 13px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.8; }
+  .cover-title { font-family: "Instrument Serif", Georgia, serif; font-size: 132px; line-height: 1; letter-spacing: -0.04em; font-weight: 400; margin: 22px 0 18px; }
+  .cover-sub { font-size: 22px; line-height: 1.4; max-width: 760px; opacity: 0.92; margin: 0; }
+  .cover-meta { position: absolute; bottom: 56px; left: 96px; right: 96px; display: flex; justify-content: space-between; font-size: 13px; opacity: 0.75; letter-spacing: 0.05em; }
+
+  .toc {
+    width: 1440px; height: 900px;
+    margin: 0 auto 32px;
+    background: white; padding: 80px 96px; box-sizing: border-box;
+    display: flex; flex-direction: column;
+  }
+  .toc-title { font-family: "Instrument Serif", Georgia, serif; font-size: 56px; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .toc-sub { font-size: 15px; color: #6b7280; margin: 0 0 40px; }
+  .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; flex: 1; }
+  .toc-section h3 { font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #4f46e5; margin: 0 0 14px; }
+  .toc-list { list-style: none; padding: 0; margin: 0; }
+  .toc-list li { display: flex; align-items: baseline; padding: 10px 0; border-bottom: 1px solid #eaeaea; font-size: 15px; }
+  .toc-list .num { font-family: "JetBrains Mono", monospace; font-size: 12px; color: #9ca3af; width: 34px; flex-shrink: 0; }
+  .toc-list .title { flex: 1; color: #111827; font-weight: 500; }
+  .toc-list .pg { font-family: "JetBrains Mono", monospace; font-size: 12px; color: #9ca3af; }
+
+  /* Print rules */
+  @page { size: 1440px 900px; margin: 0; }
+  @page :first { size: 1440px 900px; margin: 0; }
+
+  @media print {
+    html, body { background: #fff !important; }
+    .page, .cover, .toc { box-shadow: none !important; margin: 0 !important; break-after: page; page-break-after: always; }
+    .page:last-child, .toc:last-child { break-after: auto; }
+    .page-label { display: none; }
+  }
+
+  /* Special: home page is taller — print across two pages by allowing it to flow */
+  .page.tall { /* keep at native height; print will scale */ }
+  @media print {
+    .page.tall { break-inside: auto; }
+  }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body data-eh-color="indigo" data-eh-mode="light">
+<div id="root"></div>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="eduhire-shared.jsx"></script>
+<script type="text/babel" src="eduhire-marketing-auth.jsx"></script>
+<script type="text/babel" src="eduhire-school.jsx"></script>
+<script type="text/babel" src="eduhire-teacher.jsx"></script>
+<script type="text/babel" src="eduhire-shared-screens.jsx"></script>
+
+<script type="text/babel">
+  const SCREENS = [
+    { sec: "Marketing", num: "01", label: "Marketing homepage", w: 1440, h: 2400, render: () => <MarketingHome/> },
+    { sec: "Auth", num: "02", label: "Sign in", w: 1440, h: 900, render: () => <Login/> },
+    { sec: "Auth", num: "03", label: "Role select", w: 1440, h: 900, render: () => <SignupRoleSelect/> },
+    { sec: "Auth", num: "04", label: "Teacher signup", w: 1440, h: 900, render: () => <TeacherSignup/> },
+    { sec: "School Admin", num: "05", label: "Dashboard", w: 1440, h: 900, render: () => <SchoolDashboard/> },
+    { sec: "School Admin", num: "06", label: "Jobs · all postings", w: 1440, h: 900, render: () => <SchoolJobs/> },
+    { sec: "School Admin", num: "07", label: "Post a job", w: 1440, h: 900, render: () => <PostJob/> },
+    { sec: "School Admin", num: "08", label: "Applicants for a job", w: 1440, h: 900, render: () => <Applicants/> },
+    { sec: "School Admin", num: "09", label: "Pipeline (Kanban)", w: 1440, h: 900, render: () => <Pipeline/> },
+    { sec: "School Admin", num: "10", label: "Interview scheduling", w: 1440, h: 900, render: () => <InterviewScheduling/> },
+    { sec: "Teacher", num: "11", label: "Home feed", w: 1440, h: 900, render: () => <TeacherDashboard/> },
+    { sec: "Teacher", num: "12", label: "Job discovery", w: 1440, h: 900, render: () => <JobDiscovery/> },
+    { sec: "Teacher", num: "13", label: "Job detail", w: 1440, h: 900, render: () => <JobDetail/> },
+    { sec: "Teacher", num: "14", label: "Apply flow · screening questions", w: 1440, h: 900, render: () => <ApplyFlow/> },
+    { sec: "Teacher", num: "15", label: "My applications", w: 1440, h: 900, render: () => <MyApplications/> },
+    { sec: "Teacher", num: "16", label: "Teacher profile", w: 1440, h: 1000, render: () => <TeacherProfile/> },
+    { sec: "Messaging & notifications", num: "17", label: "Messages · School view", w: 1440, h: 900, render: () => <Messages role="school"/> },
+    { sec: "Messaging & notifications", num: "18", label: "Messages · Teacher view", w: 1440, h: 900, render: () => <Messages role="teacher"/> },
+    { sec: "Messaging & notifications", num: "19", label: "Notifications · Teacher", w: 1440, h: 900, render: () => <Notifications role="teacher"/> },
+    { sec: "Messaging & notifications", num: "20", label: "Notifications · School", w: 1440, h: 900, render: () => <Notifications role="school"/> },
+    { sec: "Account & system", num: "21", label: "Settings · Security", w: 1440, h: 900, render: () => <Settings role="school"/> },
+    { sec: "Account & system", num: "22", label: "System & empty states", w: 1440, h: 900, render: () => <ErrorStates/> },
+  ];
+
+  const Cover = () => (
+    <div className="cover">
+      <div style={{ position: "relative" }}>
+        <div className="cover-eyebrow">Hi-fi design system · April 2026</div>
+        <h1 className="cover-title">EduHire</h1>
+        <p className="cover-sub">A hiring platform for schools and teachers — connecting verified institutions with qualified educators across India through structured job posts, intelligent matching, interview scheduling and end-to-end pipeline management.</p>
+      </div>
+      <div className="cover-meta">
+        <span>22 screens · 6 sections · Desktop 1440px</span>
+        <span>WCAG 2.2 AA · CBSE · ICSE · IB</span>
+      </div>
+    </div>
+  );
+
+  const TOC = () => {
+    const sections = [...new Set(SCREENS.map(s => s.sec))];
+    const half = Math.ceil(sections.length / 2);
+    const cols = [sections.slice(0, half), sections.slice(half)];
+    return (
+      <div className="toc">
+        <h2 className="toc-title">Contents</h2>
+        <p className="toc-sub">From marketing to system states, end-to-end.</p>
+        <div className="toc-grid">
+          {cols.map((sectionList, ci) => (
+            <div key={ci} className="toc-section-col">
+              {sectionList.map(sec => (
+                <div key={sec} className="toc-section" style={{ marginBottom: 24 }}>
+                  <h3>{sec}</h3>
+                  <ul className="toc-list">
+                    {SCREENS.filter(s => s.sec === sec).map(s => (
+                      <li key={s.num}>
+                        <span className="num">{s.num}</span>
+                        <span className="title">{s.label}</span>
+                        <span className="pg">p.{parseInt(s.num) + 2}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const App = () => (
+    <>
+      <Cover/>
+      <TOC/>
+      {SCREENS.map(s => (
+        <div key={s.num} className={"page" + (s.h > 900 ? " tall" : "")} style={{ width: s.w, height: s.h }}>
+          <div className="page-label">{s.num} · {s.sec} — {s.label}</div>
+          <div className="page-frame">{s.render()}</div>
+        </div>
+      ))}
+    </>
+  );
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+
+  // Auto-print after fonts + Babel + a small settle delay
+  (async () => {
+    try { await document.fonts.ready; } catch {}
+    await new Promise(r => setTimeout(r, 1800));
+    window.print();
+  })();
+</script>
+</body>
+</html>

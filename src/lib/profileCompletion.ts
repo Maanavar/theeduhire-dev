@@ -2,15 +2,21 @@
 
 export type ProfileCompletionInput = {
   avatarUrl?: string | null;
+  name?: string | null;
+  phone?: string | null;
   bio?: string | null;
   qualification?: string | null;
+  experience?: string | null;
+  currentSchool?: string | null;
   city?: string | null;
-  subjects?: string[];
-  preferredBoards?: string[];
-  preferredGrades?: string[];
-  experiences?: { id: string }[];
-  certifications?: { id: string }[];
-  resumes?: { id: string }[];
+  subjects?: string[] | null;
+  preferredBoards?: string[] | null;
+  preferredGrades?: string[] | null;
+  preferredJobTypes?: string[] | null;
+  teachingMediums?: string[] | null;
+  experiences?: { id: string }[] | null;
+  certifications?: { id: string }[] | null;
+  resumes?: { id: string }[] | null;
 };
 
 export type CompletionItem = {
@@ -56,4 +62,30 @@ export function calculateProfileCompletion(
   const incomplete = details.filter((item) => !item.completed).map((item) => item.label);
 
   return { percentage, details, incomplete };
+}
+
+export function getTeacherApplyReadiness(profile: ProfileCompletionInput): {
+  completion: number;
+  resumeRequired: boolean;
+  ready: boolean;
+  blockers: string[];
+} {
+  const { percentage } = calculateProfileCompletion(profile);
+  const hasResume = (profile.resumes?.length || 0) > 0;
+  const blockers: string[] = [];
+
+  if (percentage < 80) {
+    blockers.push(`Profile completion is ${percentage}%. Reach at least 80%.`);
+  }
+
+  if (!hasResume) {
+    blockers.push("Upload a resume before applying.");
+  }
+
+  return {
+    completion: percentage,
+    resumeRequired: !hasResume,
+    ready: percentage >= 80 && hasResume,
+    blockers,
+  };
 }

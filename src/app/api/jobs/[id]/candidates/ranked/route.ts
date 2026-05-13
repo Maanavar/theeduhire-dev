@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { computeMatchScore } from "@/lib/ai-match";
 import type { RankedCandidate } from "@/types";
+import { getStoredMatchScores } from "@/lib/match-score-read-model";
+import { canManageJob } from "@/lib/policies/job-policy";
+import { getSchoolProfileIdForUser } from "@/lib/policies/application-policy";
+import { getTeacherDocumentAccessPath } from "@/lib/storage";
 
 /**
  * GET /api/jobs/[id]/candidates/ranked
@@ -21,11 +24,18 @@ export async function GET(
 
     const { user } = auth;
     const { id } = await params;
+    const { searchParams } = new URL(req.url);
+    const page = Math.max(1, Number(searchParams.get("page") || "1"));
+    const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit") || "20")));
+    const sort = searchParams.get("sort") || "match_desc";
 
     // Get job with school info
     const job = await prisma.jobPosting.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        postedBy: true,
+        schoolId: true,
         school: true,
         applications: {
           include: {
@@ -35,6 +45,21 @@ export async function GET(
               },
             },
             interview: true,
+            screeningAnswers: {
+              include: {
+                question: {
+                  select: {
+                    id: true,
+                    question: true,
+                    required: true,
+                    sortOrder: true,
+                  },
+                },
+              },
+            },
+            resume: {
+              select: { id: true, fileName: true },
+            },
           },
         },
       },
@@ -44,22 +69,21 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Job not found" }, { status: 404 });
     }
 
-    // Permission check: SCHOOL_ADMIN must own the job
-    if (user.role === "SCHOOL_ADMIN") {
-      const schoolProfile = await prisma.schoolProfile.findUnique({
-        where: { userId: user.id },
-        select: { id: true },
-      });
+    const schoolProfileId = user.role === "SCHOOL_ADMIN"
+      ? await getSchoolProfileIdForUser(prisma, user.id)
+      : null;
 
-      if (!schoolProfile || schoolProfile.id !== job.schoolId) {
-        return NextResponse.json(
-          { success: false, error: "Unauthorized" },
-          { status: 403 }
-        );
-      }
+    if (!canManageJob(user, { postedBy: job.postedBy, schoolId: job.schoolId }, schoolProfileId)) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 403 }
+      );
     }
 
-    // Compute match scores for all applicants
+    const scoreMap = await getStoredMatchScores(
+      [job.id],
+      job.applications.map((application) => application.applicantId)
+    );
     const rankedCandidates: RankedCandidate[] = [];
 
     for (const application of job.applications) {
@@ -67,66 +91,71 @@ export async function GET(
         continue; // skip if no teacher profile
       }
 
-      // Check if we already have a cached match score
-      let matchScore = await prisma.aIMatchScore.findUnique({
-        where: {
-          jobId_applicantId: {
-            jobId: job.id,
-            applicantId: application.applicantId,
-          },
-        },
-      });
-
-      // If not cached or stale, recompute
-      const now = new Date();
-      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-      const isStale = !matchScore || now.getTime() - matchScore.computedAt.getTime() > sevenDaysMs;
-
-      if (isStale) {
-        const result = computeMatchScore(
-          application.applicant.teacherProfile,
-          job
-        );
-
-        // Cache the score
-        matchScore = await prisma.aIMatchScore.upsert({
-          where: {
-            jobId_applicantId: {
-              jobId: job.id,
-              applicantId: application.applicantId,
-            },
-          },
-          update: {
-            score: result.score,
-            breakdown: result.breakdown as any,
-            explanation: result.explanation,
-            computedAt: new Date(),
-          },
-          create: {
-            jobId: job.id,
-            applicantId: application.applicantId,
-            score: result.score,
-            breakdown: result.breakdown as any,
-            explanation: result.explanation,
-          },
-        });
-      }
+      const matchScore = scoreMap.get(`${job.id}:${application.applicantId}`);
 
       if (matchScore) {
         rankedCandidates.push({
           ...application,
-          matchScore: Math.round(matchScore.score * 100),
+          applicant: {
+            ...application.applicant,
+            teacherProfile: application.applicant.teacherProfile
+              ? {
+                  ...application.applicant.teacherProfile,
+                  demoVideoUrl: application.applicant.teacherProfile.demoVideoUrl
+                    ? getTeacherDocumentAccessPath("demo-video", application.applicantId)
+                    : null,
+                  lessonPlanUrl: application.applicant.teacherProfile.lessonPlanUrl
+                    ? getTeacherDocumentAccessPath("lesson-plan", application.applicantId)
+                    : null,
+                }
+              : null,
+          },
+          matchScore: matchScore.score,
           explanation: matchScore.explanation,
+        });
+      } else {
+        rankedCandidates.push({
+          ...application,
+          applicant: {
+            ...application.applicant,
+            teacherProfile: application.applicant.teacherProfile
+              ? {
+                  ...application.applicant.teacherProfile,
+                  demoVideoUrl: application.applicant.teacherProfile.demoVideoUrl
+                    ? getTeacherDocumentAccessPath("demo-video", application.applicantId)
+                    : null,
+                  lessonPlanUrl: application.applicant.teacherProfile.lessonPlanUrl
+                    ? getTeacherDocumentAccessPath("lesson-plan", application.applicantId)
+                    : null,
+                }
+              : null,
+          },
+          matchScore: 0,
+          explanation: "Match score refreshing",
         });
       }
     }
 
-    // Sort by match score (descending)
-    rankedCandidates.sort((a, b) => b.matchScore - a.matchScore);
+    if (sort === "applied_desc") {
+      rankedCandidates.sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
+    } else if (sort === "applied_asc") {
+      rankedCandidates.sort((a, b) => new Date(a.appliedAt).getTime() - new Date(b.appliedAt).getTime());
+    } else {
+      rankedCandidates.sort((a, b) => b.matchScore - a.matchScore);
+    }
+
+    const total = rankedCandidates.length;
+    const paged = rankedCandidates.slice((page - 1) * limit, page * limit);
 
     return NextResponse.json({
       success: true,
-      data: rankedCandidates,
+      data: paged,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
     });
   } catch (error) {
     console.error("[Ranked Candidates Error]", error);

@@ -15,26 +15,37 @@ export default withAuth(
       }
 
       // School-only routes
-      const schoolRoutes = ["/dashboard/school", "/dashboard/post-job", "/dashboard/my-jobs"];
+      const schoolRoutes = [
+        "/dashboard/school",
+        "/dashboard/post-job",
+        "/dashboard/my-jobs",
+        "/dashboard/applicants",
+        "/dashboard/pipeline",
+        "/dashboard/analytics",
+      ];
       if (schoolRoutes.some((r) => path.startsWith(r)) && token.role !== "SCHOOL_ADMIN" && token.role !== "ADMIN") {
         return NextResponse.redirect(new URL("/dashboard/applications", req.url));
       }
 
       // Teacher-only routes
-      const teacherRoutes = ["/dashboard/applications", "/dashboard/saved", "/dashboard/resumes", "/dashboard/alerts"];
+      const teacherRoutes = ["/dashboard/applications", "/dashboard/saved", "/dashboard/resumes", "/dashboard/alerts", "/dashboard/recommendations"];
       if (teacherRoutes.some((r) => path.startsWith(r)) && token.role !== "TEACHER" && token.role !== "ADMIN") {
-        return NextResponse.redirect(new URL("/dashboard/my-jobs", req.url));
+        return NextResponse.redirect(new URL("/dashboard/school", req.url));
       }
     }
 
     // Redirect authenticated users away from auth pages
     if (path.startsWith("/auth/") && token) {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
+      if (token.role === "SCHOOL_ADMIN") return NextResponse.redirect(new URL("/dashboard/school", req.url));
+      if (token.role === "ADMIN") return NextResponse.redirect(new URL("/admin", req.url));
+      return NextResponse.redirect(new URL("/dashboard/applications", req.url));
     }
 
     // Redirect authenticated users from home to dashboard
     if (path === "/" && token) {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
+      if (token.role === "SCHOOL_ADMIN") return NextResponse.redirect(new URL("/dashboard/school", req.url));
+      if (token.role === "ADMIN") return NextResponse.redirect(new URL("/admin", req.url));
+      return NextResponse.redirect(new URL("/dashboard/applications", req.url));
     }
 
     return NextResponse.next();

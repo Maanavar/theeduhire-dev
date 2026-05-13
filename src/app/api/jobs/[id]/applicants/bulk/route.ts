@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 import { bulkStatusUpdateSchema } from "@/lib/validators/application";
-import { sendStatusUpdate } from "@/lib/email";
+import { publishDomainEvent } from "@/lib/domain-events";
+import { canManageJob } from "@/lib/policies/job-policy";
+import { getSchoolProfileIdForUser } from "@/lib/policies/application-policy";
 
 export async function POST(
   req: NextRequest,
@@ -26,6 +28,7 @@ export async function POST(
       where: { id: jobId },
       select: {
         postedBy: true,
+        schoolId: true,
         title: true,
         school: { select: { schoolName: true } },
       },
@@ -35,7 +38,10 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Job not found" }, { status: 404 });
     }
 
-    if (job.postedBy !== auth.user.id && auth.user.role !== "ADMIN") {
+    const schoolProfileId = auth.user.role === "SCHOOL_ADMIN"
+      ? await getSchoolProfileIdForUser(prisma, auth.user.id)
+      : null;
+    if (!canManageJob(auth.user, { postedBy: job.postedBy, schoolId: job.schoolId }, schoolProfileId)) {
       return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
     }
 
@@ -45,8 +51,10 @@ export async function POST(
         id: { in: parsed.data.applicationIds },
         jobId: jobId,
       },
-      include: {
-        applicant: { select: { email: true, name: true } },
+      select: {
+        id: true,
+        applicantId: true,
+        status: true,
       },
     });
 
@@ -67,8 +75,8 @@ export async function POST(
       rejectionReason: parsed.data.rejectionReason ?? undefined,
     }));
 
-    await prisma.$transaction([
-      prisma.application.updateMany({
+    await prisma.$transaction(async (tx: any) => {
+      await tx.application.updateMany({
         where: {
           id: { in: parsed.data.applicationIds },
         },
@@ -77,25 +85,33 @@ export async function POST(
           rejectionReason: parsed.data.rejectionReason ?? undefined,
           reviewedAt: new Date(),
         },
-      }),
-      ...historyEntries.map((entry) =>
-        prisma.applicationStatusHistory.create({ data: entry })
-      ),
-    ]);
+      });
 
-    // Send bulk emails non-blocking
-    Promise.allSettled(
-      applicationsToUpdate.map((app) =>
-        sendStatusUpdate({
-          teacherEmail: app.applicant.email,
-          teacherName: app.applicant.name,
-          jobTitle: job.title,
-          schoolName: job.school.schoolName,
-          newStatus: parsed.data.status,
-          jobId,
-        })
-      )
-    ).catch((err) => console.error("Bulk email error:", err));
+      for (const entry of historyEntries) {
+        await tx.applicationStatusHistory.create({ data: entry });
+      }
+
+      for (const app of applicationsToUpdate) {
+        await publishDomainEvent(tx, {
+          eventType: "application_status_changed",
+          aggregateType: "application",
+          aggregateId: app.id,
+          actorId: auth.user.id,
+          payload: {
+            applicationId: app.id,
+            jobId,
+            applicantId: app.applicantId,
+            fromStatus: app.status,
+            toStatus: parsed.data.status,
+            rejectionReason: parsed.data.rejectionReason ?? null,
+            note: parsed.data.note ?? null,
+          },
+          metadata: {
+            source: "api.jobs.applicants.bulk",
+          },
+        });
+      }
+    });
 
     return NextResponse.json({
       success: true,

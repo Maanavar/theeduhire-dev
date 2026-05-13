@@ -1,54 +1,72 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import JobFilters from "@/components/jobs/job-filters";
 import JobSplitView from "@/components/jobs/job-split-view";
+import { LoadingState } from "@/components/system/system-states";
+import { getSession } from "@/lib/session";
+import { JobsPageHeader } from "@/components/marketing/jobs-page-header";
 
-export const metadata: Metadata = {
-  title: "Teaching Jobs in Tamil Nadu",
-  description:
-    "Browse teaching positions across 15+ cities in Tamil Nadu. Filter by subject, board, location, and grade level.",
-};
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://theeduhire.in";
 
-export default function JobsPage() {
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}): Promise<Metadata> {
+  const query = await searchParams;
+  const params = new URLSearchParams();
+  const keys = ["subject", "location", "board", "gradeLevel", "experienceLevel", "search", "sort"];
+  for (const key of keys) {
+    const value = query[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      params.set(key, value);
+    }
+  }
+  const canonical = params.toString() ? `${BASE_URL}/jobs?${params.toString()}` : `${BASE_URL}/jobs`;
+
+  return {
+    title: "Teaching Jobs in Tamil Nadu",
+    description:
+      "Browse teaching positions across 15+ cities in Tamil Nadu. Filter by subject, board, location, and grade level.",
+    alternates: {
+      canonical,
+    },
+  };
+}
+
+export default async function JobsPage() {
+  const session = await getSession();
+  if (session?.user?.role === "TEACHER") {
+    redirect("/dashboard/jobs");
+  }
+  if (session?.user?.role === "SCHOOL_ADMIN") {
+    redirect("/dashboard/school");
+  }
+
   return (
-    <div className="max-w-[1280px] mx-auto px-5 py-6 space-y-5">
-      {/* Header */}
-      <div>
-        <h1 className="font-display text-[28px] font-bold text-gray-900">
-          Teaching Opportunities
-        </h1>
-        <p className="text-gray-500 text-[14px] mt-0.5">
-          Discover your next teaching position across Tamil Nadu
-        </p>
-      </div>
+    <div className="bg-white">
+      {/* Page header */}
+      <section className="border-b border-[var(--eh-border)] bg-white px-5 pb-8 pt-10 md:px-8 md:pt-12">
+        <div className="mx-auto max-w-[1320px]">
+          <JobsPageHeader />
+        </div>
+      </section>
 
-      {/* Filters — wrapped in Suspense for useSearchParams */}
-      <Suspense
-        fallback={
-          <div className="space-y-3">
-            <div className="h-10 bg-gray-100 rounded-xl animate-pulse" />
-            <div className="flex gap-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-9 w-28 bg-gray-100 rounded-lg animate-pulse"
-                />
-              ))}
-            </div>
-          </div>
-        }
-      >
-        <JobFilters />
-      </Suspense>
+      {/* Filters + job list */}
+      <section className="mx-auto max-w-[1320px] space-y-5 px-5 py-6 md:px-8 md:py-8">
+        <Suspense
+          fallback={<LoadingState title="Loading filters" message="Preparing search filters for jobs." />}
+        >
+          <JobFilters />
+        </Suspense>
 
-      {/* Split pane — also needs Suspense */}
-      <Suspense
-        fallback={
-          <div className="bg-white border border-gray-200/80 rounded-2xl h-[500px] animate-pulse" />
-        }
-      >
-        <JobSplitView />
-      </Suspense>
+        <Suspense
+          fallback={<LoadingState title="Loading jobs" message="Fetching available teaching opportunities." />}
+        >
+          <JobSplitView />
+        </Suspense>
+      </section>
     </div>
   );
 }

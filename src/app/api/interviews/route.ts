@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { requireAuth } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { scheduleInterviewSchema } from "@/lib/validators/interview";
-import { sendInterviewInvite, sendNewApplicationAlert } from "@/lib/email";
+import { sendInterviewInvite } from "@/lib/email";
 import { createEvent } from "ics";
+import { cacheTags } from "@/lib/cache-tags";
 
 /**
  * POST /api/interviews
@@ -29,16 +31,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { applicationId, scheduledAt, durationMins, type, meetingLink, location } = parsed.data;
+    const { applicationId, scheduledAt, durationMins, type, meetingLink, location, schoolNotes } = parsed.data;
 
     // Get application with job and applicant details
     const application = await prisma.application.findUnique({
       where: { id: applicationId },
-      include: {
+      select: {
+        id: true,
+        applicantId: true,
         job: {
-          include: { school: true, poster: true },
+          select: {
+            id: true,
+            postedBy: true,
+            schoolId: true,
+            title: true,
+            school: {
+              select: {
+                schoolName: true,
+              },
+            },
+          },
         },
-        applicant: true,
+        applicant: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
       },
     });
 
@@ -73,12 +92,37 @@ export async function POST(req: NextRequest) {
         type,
         meetingLink: meetingLink || null,
         location: location || null,
+        schoolNotes: schoolNotes || null,
       },
       include: {
         application: {
-          include: {
-            job: { include: { school: true } },
-            applicant: true,
+          select: {
+            id: true,
+            status: true,
+            appliedAt: true,
+            applicantId: true,
+            jobId: true,
+            job: {
+              select: {
+                id: true,
+                title: true,
+                school: {
+                  select: {
+                    schoolName: true,
+                    city: true,
+                    verified: true,
+                    logoUrl: true,
+                  },
+                },
+              },
+            },
+            applicant: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
           },
         },
       },
@@ -88,6 +132,33 @@ export async function POST(req: NextRequest) {
     await prisma.application.update({
       where: { id: applicationId },
       data: { status: "INTERVIEW_SCHEDULED" },
+    });
+
+    await prisma.notification.createMany({
+      data: [
+        {
+          userId: application.applicantId,
+          type: "INTERVIEW",
+          title: "Interview scheduled",
+          body: `${application.job.title} - ${application.job.school.schoolName}`,
+          payload: {
+            interviewId: interview.id,
+            applicationId: application.id,
+            jobId: application.job.id,
+          },
+        },
+        {
+          userId: application.job.postedBy,
+          type: "INTERVIEW",
+          title: "Interview scheduled",
+          body: `${application.applicant.name} - ${application.job.title}`,
+          payload: {
+            interviewId: interview.id,
+            applicationId: application.id,
+            jobId: application.job.id,
+          },
+        },
+      ],
     });
 
     // Generate .ics calendar file
@@ -131,14 +202,7 @@ export async function POST(req: NextRequest) {
       icsData: icsBuffer,
     }).catch((err) => console.error("[Interview Invite Email Error]", err));
 
-    // Send notification to school
-    sendNewApplicationAlert({
-      schoolEmail: application.job.poster.email,
-      schoolName: application.job.school.schoolName,
-      teacherName: application.applicant.name,
-      jobTitle: `Interview scheduled: ${application.job.title}`,
-      jobId: application.job.id,
-    }).catch((err) => console.error("[Interview Notification Email Error]", err));
+    revalidateTag(cacheTags.schoolAnalytics(application.job.schoolId));
 
     return NextResponse.json({
       success: true,
@@ -158,7 +222,7 @@ export async function POST(req: NextRequest) {
  * List interviews scoped by role
  * Teachers see their interviews, schools see their job's interviews, admins see all
  */
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const auth = await requireAuth();
     if ("error" in auth) {
@@ -179,8 +243,26 @@ export async function GET(req: NextRequest) {
         },
         include: {
           application: {
-            include: {
-              job: { include: { school: true } },
+            select: {
+              id: true,
+              applicantId: true,
+              jobId: true,
+              status: true,
+              appliedAt: true,
+              job: {
+                select: {
+                  id: true,
+                  title: true,
+                  school: {
+                    select: {
+                      schoolName: true,
+                      city: true,
+                      verified: true,
+                      logoUrl: true,
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -210,9 +292,33 @@ export async function GET(req: NextRequest) {
         },
         include: {
           application: {
-            include: {
-              job: { include: { school: true } },
-              applicant: true,
+            select: {
+              id: true,
+              applicantId: true,
+              jobId: true,
+              status: true,
+              appliedAt: true,
+              job: {
+                select: {
+                  id: true,
+                  title: true,
+                  school: {
+                    select: {
+                      schoolName: true,
+                      city: true,
+                      verified: true,
+                      logoUrl: true,
+                    },
+                  },
+                },
+              },
+              applicant: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
             },
           },
         },
@@ -223,9 +329,33 @@ export async function GET(req: NextRequest) {
       interviews = await prisma.interview.findMany({
         include: {
           application: {
-            include: {
-              job: { include: { school: true } },
-              applicant: true,
+            select: {
+              id: true,
+              applicantId: true,
+              jobId: true,
+              status: true,
+              appliedAt: true,
+              job: {
+                select: {
+                  id: true,
+                  title: true,
+                  school: {
+                    select: {
+                      schoolName: true,
+                      city: true,
+                      verified: true,
+                      logoUrl: true,
+                    },
+                  },
+                },
+              },
+              applicant: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
             },
           },
         },

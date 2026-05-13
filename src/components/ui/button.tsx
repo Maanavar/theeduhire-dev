@@ -5,7 +5,7 @@ import { forwardRef } from "react";
 
 const buttonVariants = cva(
   [
-    "inline-flex items-center justify-center gap-2 font-semibold rounded-xl",
+    "inline-flex items-center justify-center gap-2 font-semibold rounded-full",
     "transition-all duration-[120ms] ease-out",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2",
     "disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
@@ -15,13 +15,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary: [
-          "bg-brand-500 text-white shadow-brand",
-          "hover:bg-brand-600 hover:-translate-y-px hover:shadow-brand-lg",
-          "active:translate-y-0 active:shadow-brand",
+          "bg-[var(--eh-primary-500)] text-white shadow-none",
+          "hover:bg-[var(--eh-primary-700)] hover:-translate-y-px",
+          "active:translate-y-0",
         ].join(" "),
         secondary: [
-          "border border-black/[0.09] text-gray-700 bg-white shadow-xs",
-          "hover:border-black/[0.15] hover:bg-gray-50 hover:-translate-y-px hover:shadow-sm",
+          "border border-[var(--eh-border)] bg-white text-[var(--eh-primary-700)] shadow-none",
+          "hover:border-[var(--eh-primary-200)] hover:bg-[var(--eh-primary-50)] hover:-translate-y-px",
           "active:translate-y-0",
         ].join(" "),
         accent: [
@@ -30,8 +30,8 @@ const buttonVariants = cva(
           "active:translate-y-0",
         ].join(" "),
         ghost: [
-          "text-gray-600",
-          "hover:bg-black/[0.04] hover:text-gray-900",
+          "text-[var(--eh-text-2)]",
+          "hover:bg-[var(--eh-primary-50)] hover:text-[var(--eh-primary-700)]",
         ].join(" "),
         danger: [
           "bg-red-500 text-white shadow-sm",
@@ -44,10 +44,10 @@ const buttonVariants = cva(
         ].join(" "),
       },
       size: {
-        xs: "px-2.5 py-1.5 text-xs rounded-lg",
-        sm: "px-3 py-1.5 text-sm",
+        xs: "px-2.5 py-1.5 text-xs",
+        sm: "px-3.5 py-2 text-sm",
         md: "px-5 py-2.5 text-[15px]",
-        lg: "px-7 py-3.5 text-[15px]",
+        lg: "px-7 py-3 text-[15px]",
       },
     },
     defaultVariants: { variant: "primary", size: "md" },

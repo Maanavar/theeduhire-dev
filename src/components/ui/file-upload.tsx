@@ -1,8 +1,10 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import { Upload, FileText, X, CheckCircle2 } from "lucide-react";
+import { Upload, X, CheckCircle2 } from "lucide-react";
 import { MAX_RESUME_SIZE, ALLOWED_RESUME_TYPES } from "@/config/constants";
+import { getApiErrorMessage } from "@/lib/api/client";
+import { uploadResume } from "@/lib/api/profile-client";
 
 interface Props {
   onUpload: (resumeId: string, fileName: string) => void;
@@ -29,17 +31,10 @@ export default function FileUpload({ onUpload, onClear, uploadedName }: Props) {
 
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/upload/resume", { method: "POST", body: formData });
-      const data = await res.json();
-      if (data.success) {
-        onUpload(data.data.resumeId, data.data.fileName);
-      } else {
-        setError(data.error || "Upload failed. Please try again.");
-      }
-    } catch {
-      setError("Network error during upload.");
+      const data = await uploadResume(file);
+      onUpload(data.resumeId, data.fileName);
+    } catch (error) {
+      setError(getApiErrorMessage(error, "Upload failed. Please try again."));
     } finally {
       setUploading(false);
     }
