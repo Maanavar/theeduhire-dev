@@ -28,8 +28,9 @@ export type CompletionItem = {
 
 const COMPLETION_WEIGHTS: CompletionItem[] = [
   { field: "avatarUrl", weight: 10, label: "Profile photo", completed: false },
-  { field: "bio", weight: 15, label: "Bio", completed: false },
+  { field: "bio", weight: 10, label: "Bio", completed: false },
   { field: "qualification", weight: 10, label: "Qualification", completed: false },
+  { field: "experience", weight: 5, label: "Years of experience", completed: false },
   { field: "city", weight: 5, label: "City", completed: false },
   { field: "subjects", weight: 15, label: "Subjects (at least 1)", completed: false },
   { field: "preferredBoards", weight: 5, label: "Preferred boards (at least 1)", completed: false },

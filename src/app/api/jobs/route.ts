@@ -8,7 +8,10 @@ import { sendJobAlertDigest } from "@/lib/email";
 import { publishDomainEvent } from "@/lib/domain-events";
 import { sanitizePlainText } from "@/lib/sanitize";
 import { isPrismaMissingColumnError } from "@/lib/prisma-errors";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { cacheTags } from "@/lib/cache-tags";
+import { canPostJob } from "@/lib/subscription";
+import { JOB_POST_RATE_LIMIT_WINDOW_MS, JOB_POST_USER_LIMIT } from "@/config/constants";
 
 const JOBS_PER_PAGE = 20;
 
@@ -60,7 +63,10 @@ export async function GET(req: NextRequest) {
           OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
         },
         {
-          school: { user: { isSuspended: false } },
+          OR: [
+            { school: { isOfflineManaged: true } },
+            { school: { user: { isSuspended: false } } },
+          ],
         },
       ],
     };
@@ -148,6 +154,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }
 
+    const rateLimit = await checkRateLimit({
+      key: `jobs.post:${auth.user.id}`,
+      action: "jobs.post",
+      actorKey: auth.user.id,
+      limit: JOB_POST_USER_LIMIT,
+      windowMs: JOB_POST_RATE_LIMIT_WINDOW_MS,
+    });
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many job posts. Please try again later." },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
     const requestedStatus = body?.status === "DRAFT" || body?.status === "ACTIVE" ? body.status : "ACTIVE";
     const jobPayload = { ...(body || {}) };
@@ -184,6 +204,24 @@ export async function POST(req: NextRequest) {
         { success: false, error: "Only verified schools can post jobs. Please complete verification first." },
         { status: 403 }
       );
+    }
+
+    // Subscription gate — enforce active post limit for non-admins posting live jobs
+    if (auth.user.role !== "ADMIN" && requestedStatus === "ACTIVE") {
+      const postCheck = await canPostJob(auth.user.id);
+      if (!postCheck.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: postCheck.reason ?? "Post limit reached. Upgrade your plan to post more jobs.",
+            code: "POST_LIMIT_REACHED",
+            postsUsed: postCheck.postsUsed,
+            postsLimit: postCheck.postsLimit,
+            plan: postCheck.plan,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     const { requirements, benefits, screeningQuestions, ...jobData } = parsed.data;
@@ -244,6 +282,14 @@ export async function POST(req: NextRequest) {
             source: "api.jobs.post",
           },
         });
+
+        // Increment the cycle post counter for school subscriptions
+        if (auth.user.role !== "ADMIN") {
+          await tx.schoolSubscription.updateMany({
+            where: { schoolUserId: auth.user.id },
+            data: { postsUsedThisCycle: { increment: 1 } },
+          });
+        }
       }
 
       return created;
@@ -256,38 +302,55 @@ export async function POST(req: NextRequest) {
           include: { user: true },
         });
 
-        for (const alert of immediateAlerts) {
-          if (alert.subject && alert.subject !== job.subject) continue;
-          if (alert.city && alert.city !== school.city) continue;
-          if (alert.board && alert.board !== job.board) continue;
-          if (alert.gradeLevel && alert.gradeLevel !== job.gradeLevel) continue;
-          if (alert.jobType && alert.jobType !== job.jobType) continue;
-          if (alert.salaryMin && job.salaryMax && job.salaryMax < alert.salaryMin) continue;
-          if (alert.salaryMax && job.salaryMin && job.salaryMin > alert.salaryMax) continue;
+        // Pre-filter alerts by job attributes before any DB calls.
+        const matchingAlerts = immediateAlerts.filter((alert) => {
+          if (alert.subject && alert.subject !== job.subject) return false;
+          if (alert.city && alert.city !== school.city) return false;
+          if (alert.board && alert.board !== job.board) return false;
+          if (alert.gradeLevel && alert.gradeLevel !== job.gradeLevel) return false;
+          if (alert.jobType && alert.jobType !== job.jobType) return false;
+          if (alert.salaryMin && job.salaryMax && job.salaryMax < alert.salaryMin) return false;
+          if (alert.salaryMax && job.salaryMin && job.salaryMin > alert.salaryMax) return false;
+          return true;
+        });
+
+        if (matchingAlerts.length === 0) return;
+
+        // Batch-fetch PRO status for all matching alert owners in a single query.
+        const userIds = [...new Set(matchingAlerts.map((a) => a.userId))];
+        const proSubs = await prisma.teacherSubscription.findMany({
+          where: {
+            teacherUserId: { in: userIds },
+            plan: "PRO",
+            status: { notIn: ["CANCELED", "PAST_DUE"] },
+          },
+          select: { teacherUserId: true },
+        });
+        const proUserIds = new Set(proSubs.map((s) => s.teacherUserId));
+
+        const jobPayload = {
+          id: job.id,
+          title: job.title,
+          subject: job.subject,
+          city: school.city,
+          schoolName: school.schoolName,
+          salaryMin: job.salaryMin || undefined,
+          salaryMax: job.salaryMax || undefined,
+          description: job.description,
+        };
+
+        for (const alert of matchingAlerts) {
+          if (!proUserIds.has(alert.userId)) continue;
 
           await sendJobAlertDigest({
             teacherEmail: alert.user.email,
             alertName: alert.name,
-            jobs: [
-              {
-                id: job.id,
-                title: job.title,
-                subject: job.subject,
-                city: school.city,
-                schoolName: school.schoolName,
-                salaryMin: job.salaryMin || undefined,
-                salaryMax: job.salaryMax || undefined,
-                description: job.description,
-              },
-            ],
+            jobs: [jobPayload],
             frequency: "IMMEDIATE",
           });
 
           await prisma.alertHistory.create({
-            data: {
-              alertId: alert.id,
-              jobIds: [job.id],
-            },
+            data: { alertId: alert.id, jobIds: [job.id] },
           });
         }
       } catch (error) {

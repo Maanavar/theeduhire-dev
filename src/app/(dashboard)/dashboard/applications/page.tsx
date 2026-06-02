@@ -7,7 +7,8 @@ import { formatSalary, timeAgo } from "@/lib/utils";
 import { MapPin, ArrowRight, RefreshCw, Download, ChevronDown, Filter, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FilterBar, PageHeader, PageShell, Panel, StatusBadge, Toolbar } from "@/components/layout/page-shell";
-import { EmptyState, ErrorState, LoadingState } from "@/components/system/system-states";
+import { EmptyState, ErrorState } from "@/components/system/system-states";
+import { CardListSkeleton } from "@/components/system/dashboard-skeletons";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api/client";
 import {
@@ -119,14 +120,14 @@ export default function ApplicationsPage() {
 
   const withdrawApplication = async (applicationId: string) => {
     setWithdrawingAppId(applicationId);
+    const snapshot = apps;
+    setApps((current) => current.filter((item) => item.id !== applicationId));
+    if (expandedAppId === applicationId) setExpandedAppId(null);
     try {
       await withdrawTeacherApplication(applicationId);
-      setApps((current) => current.filter((item) => item.id !== applicationId));
-      if (expandedAppId === applicationId) {
-        setExpandedAppId(null);
-      }
       toast.success("Application withdrawn");
     } catch (err) {
+      setApps(snapshot);
       toast.error(getApiErrorMessage(err, "Failed to withdraw application"));
     } finally {
       setWithdrawingAppId(null);
@@ -188,7 +189,7 @@ export default function ApplicationsPage() {
       </Panel>
 
       {loading ? (
-        <LoadingState title="Loading applications" message="Fetching your application timeline and status updates." />
+        <CardListSkeleton cards={5} />
       ) : error ? (
         <ErrorState
           title="Failed to load applications"

@@ -5,34 +5,70 @@ import { ToastProvider } from "@/components/ui/toast";
 import { LangProvider } from "@/lib/i18n/context";
 import "@/styles/globals.css";
 
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://theeduhire.in";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(BASE_URL),
   title: {
-    default: "EduHire — Teaching Jobs in India | CBSE, ICSE, State Board Jobs",
+    default: "EduHire — Teaching Jobs in Tamil Nadu | CBSE, ICSE, State Board",
     template: "%s | EduHire",
   },
   description:
-    "Find your perfect teaching position across India. CBSE, ICSE, State Board, IB — all boards covered. Verified schools, transparent salaries, smart matching.",
+    "Find teaching jobs across Tamil Nadu. CBSE, ICSE, State Board, Matriculation — all boards. Verified schools, transparent salaries, smart matching. Free for teachers.",
   keywords: [
-    "teaching jobs",
-    "teacher jobs",
-    "teaching positions",
-    "CBSE jobs",
-    "ICSE jobs",
-    "State Board jobs",
-    "school teacher jobs",
-    "education jobs",
-    "teaching vacancies",
-    "teacher recruitment",
-    "online teaching jobs",
-    "part time teaching jobs"
+    "teaching jobs Tamil Nadu",
+    "teacher jobs Chennai",
+    "teacher jobs Coimbatore",
+    "CBSE teaching jobs",
+    "ICSE teaching jobs",
+    "State Board teacher jobs",
+    "Matriculation school jobs",
+    "school teacher jobs India",
+    "education jobs Tamil Nadu",
+    "teacher recruitment India",
+    "TNTET jobs",
+    "CTET teaching jobs",
+    "part time teaching jobs",
+    "fresher teacher jobs",
+    "B.Ed jobs Tamil Nadu",
   ],
   openGraph: {
-    title: "EduHire — Teaching Jobs in India | CBSE, ICSE, State Board Jobs",
+    title: "EduHire — Teaching Jobs in Tamil Nadu | CBSE, ICSE, State Board",
     description:
-      "Connecting passionate educators with leading schools across India.",
-    url: "https://theeduhire.in",
+      "Verified schools, transparent salaries, smart matching. Find your next teaching role in Tamil Nadu.",
+    url: BASE_URL,
     siteName: "EduHire",
     type: "website",
+    locale: "en_IN",
+    images: [
+      {
+        url: "/og-default.png",
+        width: 1200,
+        height: 630,
+        alt: "EduHire — Teaching Jobs in Tamil Nadu",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "EduHire — Teaching Jobs in Tamil Nadu",
+    description:
+      "Verified schools, transparent salaries. Free for teachers. Find your next teaching role in Tamil Nadu.",
+    images: ["/og-default.png"],
+  },
+  alternates: {
+    canonical: BASE_URL,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
   },
 };
 

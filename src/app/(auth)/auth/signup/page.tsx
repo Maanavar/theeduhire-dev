@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BOARDS, SUBJECTS } from "@/config/constants";
+import { BOARDS, EXPERIENCE_LEVELS, LOCATIONS, SUBJECTS } from "@/config/constants";
 import { useLang } from "@/lib/i18n/context";
 import {
   ArrowRight,
@@ -348,10 +348,9 @@ function SignUpForm() {
                       <label className="eh-label">{t.signup.experience}</label>
                       <select className="input-base" value={experience} onChange={(event) => setExperience(event.target.value)}>
                         <option value="">Select experience</option>
-                        <option>1 year</option>
-                        <option>3 years</option>
-                        <option>6 years</option>
-                        <option>10+ years</option>
+                        {EXPERIENCE_LEVELS.map((level) => (
+                          <option key={level} value={level}>{level}</option>
+                        ))}
                       </select>
                     </div>
 
@@ -400,12 +399,16 @@ function SignUpForm() {
 
                     <div className="md:col-span-2">
                       <label className="eh-label">{t.signup.location}</label>
-                      <input
+                      <select
                         className="input-base"
                         value={location}
                         onChange={(event) => setLocation(event.target.value)}
-                        placeholder="Chennai, Tamil Nadu"
-                      />
+                      >
+                        <option value="">Select city</option>
+                        {LOCATIONS.map((loc) => (
+                          <option key={loc} value={loc}>{loc}</option>
+                        ))}
+                      </select>
                     </div>
                   </>
                 ) : (
@@ -502,13 +505,13 @@ function SignUpForm() {
                 />
                 <span>
                   I agree to the{" "}
-                  <a href="mailto:hello@theeduhire.in?subject=Terms" className="text-eh-primary hover:text-eh-primary-700">
+                  <Link href="/terms" target="_blank" className="text-eh-primary hover:text-eh-primary-700">
                     Terms of Service
-                  </a>{" "}
+                  </Link>{" "}
                   and{" "}
-                  <a href="mailto:hello@theeduhire.in?subject=Privacy" className="text-eh-primary hover:text-eh-primary-700">
+                  <Link href="/privacy" target="_blank" className="text-eh-primary hover:text-eh-primary-700">
                     Privacy Policy
-                  </a>
+                  </Link>
                   . EduHire may send account and application updates.
                 </span>
               </label>
@@ -519,11 +522,11 @@ function SignUpForm() {
                 <div className="mt-2 space-y-2">
                   <details className="rounded-lg bg-white px-3 py-2">
                     <summary className="cursor-pointer font-medium text-eh-text">What the Terms of Service cover</summary>
-                    <p className="mt-2 text-eh-text3">Account use, truthful profile information, acceptable platform behavior, and how applications are processed.</p>
+                    <p className="mt-2 text-eh-text3">Account use, truthful profile information, acceptable platform behavior, and how applications are processed. <Link href="/terms" target="_blank" className="text-eh-primary hover:underline">Read full Terms →</Link></p>
                   </details>
                   <details className="rounded-lg bg-white px-3 py-2">
                     <summary className="cursor-pointer font-medium text-eh-text">What the Privacy Policy covers</summary>
-                    <p className="mt-2 text-eh-text3">What profile, resume, and contact information schools can see, and how EduHire stores and processes your data.</p>
+                    <p className="mt-2 text-eh-text3">What profile, resume, and contact information schools can see, and how EduHire stores and processes your data under India&apos;s DPDP Act. <Link href="/privacy" target="_blank" className="text-eh-primary hover:underline">Read full Privacy Policy →</Link></p>
                   </details>
                 </div>
               </div>

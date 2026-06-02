@@ -8,7 +8,8 @@ export type AdminActionVariant =
   | { kind: "confirm"; message: string; confirmLabel?: string; danger?: boolean }
   | { kind: "notes"; label: string; confirmLabel?: string; danger?: boolean }
   | { kind: "reason"; label: string; placeholder?: string; confirmLabel?: string; danger?: boolean }
-  | { kind: "reason-notes"; reasonLabel: string; notesLabel?: string; placeholder?: string; confirmLabel?: string; danger?: boolean };
+  | { kind: "reason-notes"; reasonLabel: string; notesLabel?: string; placeholder?: string; confirmLabel?: string; danger?: boolean }
+  | { kind: "select-notes"; reasons: { value: string; label: string }[]; notesLabel?: string; confirmLabel?: string; danger?: boolean };
 
 interface Props {
   open: boolean;
@@ -54,9 +55,15 @@ export default function AdminActionModal({ open, title, description, variant, lo
         return;
       }
     }
+    if (variant.kind === "select-notes") {
+      if (!reason) {
+        setReasonError("Please select a reason.");
+        return;
+      }
+    }
     onConfirm({
-      reason: (variant.kind === "reason" || variant.kind === "reason-notes") ? reason.trim() : undefined,
-      notes: (variant.kind === "notes" || variant.kind === "reason-notes") ? (notes.trim() || undefined) : undefined,
+      reason: (variant.kind === "reason" || variant.kind === "reason-notes" || variant.kind === "select-notes") ? reason.trim() || undefined : undefined,
+      notes: (variant.kind === "notes" || variant.kind === "reason-notes" || variant.kind === "select-notes") ? (notes.trim() || undefined) : undefined,
     });
   };
 
@@ -139,6 +146,44 @@ export default function AdminActionModal({ open, title, description, variant, lo
                 className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-[13.5px] text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-brand-500 focus:bg-white"
               />
             </div>
+          )}
+
+          {variant.kind === "select-notes" && (
+            <>
+              <div>
+                <label className="mb-1.5 block text-[12px] font-semibold text-gray-700">
+                  Rejection reason <span className="text-red-500">*</span>
+                </label>
+                <select
+                  ref={firstInputRef as any}
+                  value={reason}
+                  onChange={(e) => { setReason(e.target.value); setReasonError(""); }}
+                  className={cn(
+                    "w-full rounded-xl border bg-gray-50 px-3.5 py-2.5 text-[13.5px] text-gray-800 outline-none transition-colors focus:border-brand-500 focus:bg-white",
+                    reasonError ? "border-red-300" : "border-gray-200"
+                  )}
+                >
+                  <option value="">Select a reason…</option>
+                  {variant.reasons.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+                {reasonError && <p className="mt-1 text-[12px] text-red-500">{reasonError}</p>}
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[12px] font-semibold text-gray-700">
+                  {variant.notesLabel ?? "Internal notes"}
+                  <span className="ml-1 text-gray-400">(optional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Additional context visible only to admins..."
+                  className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-[13.5px] text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-brand-500 focus:bg-white"
+                />
+              </div>
+            </>
           )}
         </div>
 

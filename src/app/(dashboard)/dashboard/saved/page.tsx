@@ -6,7 +6,8 @@ import { formatSalary, timeAgo } from "@/lib/utils";
 import { MapPin, BookmarkX, ExternalLink, CheckCircle2 } from "lucide-react";
 import JobDetailModal from "@/components/jobs/job-detail-modal";
 import { PageHeader } from "@/components/layout/page-shell";
-import { EmptyState, ErrorState, LoadingState } from "@/components/system/system-states";
+import { EmptyState, ErrorState } from "@/components/system/system-states";
+import { CardListSkeleton } from "@/components/system/dashboard-skeletons";
 import { trackEvent } from "@/lib/analytics";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { getSavedJobs, toggleSavedJob } from "@/lib/api/teacher-client";
@@ -28,14 +29,13 @@ export default function SavedJobsPage() {
   }, []);
 
   const unsave = async (jobId: string) => {
+    const snapshot = saved;
+    setSaved((prev) => prev.filter((s) => s.job.id !== jobId));
     try {
-      const result = await toggleSavedJob(jobId);
-      if (!result.saved) {
-        setSaved((prev) => prev.filter((s) => s.job.id !== jobId));
-        trackEvent("job_saved", { jobId, saved: false, source: "saved_jobs_page" });
-      }
+      await toggleSavedJob(jobId);
+      trackEvent("job_saved", { jobId, saved: false, source: "saved_jobs_page" });
     } catch {
-      // silently ignore unsave failures
+      setSaved(snapshot);
     }
   };
 
@@ -56,7 +56,7 @@ export default function SavedJobsPage() {
       />
 
       {loading ? (
-        <LoadingState title="Loading saved jobs" message="Fetching your bookmarked opportunities." />
+        <CardListSkeleton cards={4} />
       ) : error ? (
         <ErrorState title="Failed to load saved jobs" message={error} />
       ) : saved.length === 0 ? (

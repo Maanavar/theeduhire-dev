@@ -6,6 +6,16 @@ import { getStoredMatchScores } from "@/lib/match-score-read-model";
 import { canManageJob } from "@/lib/policies/job-policy";
 import { getSchoolProfileIdForUser } from "@/lib/policies/application-policy";
 import { getTeacherDocumentAccessPath } from "@/lib/storage";
+import { canViewContactDetails, canUseAIShortlist } from "@/lib/subscription";
+
+async function getFeaturedApplicantIds(applicantIds: string[]): Promise<Set<string>> {
+  if (applicantIds.length === 0) return new Set();
+  const subs = await prisma.teacherSubscription.findMany({
+    where: { teacherUserId: { in: applicantIds }, plan: "PRO", status: { not: "CANCELED" } },
+    select: { teacherUserId: true },
+  });
+  return new Set(subs.map((s) => s.teacherUserId));
+}
 
 /**
  * GET /api/jobs/[id]/candidates/ranked
@@ -80,6 +90,16 @@ export async function GET(
       );
     }
 
+    // ADMIN always gets full access; schools need Growth+ for AI scores and contact
+    const applicantIds = job.applications.map((a) => a.applicantId);
+    const [contactAllowed, aiAllowed, featuredIds] = user.role === "ADMIN"
+      ? [true, true, new Set<string>()]
+      : await Promise.all([
+          canViewContactDetails(user.id),
+          canUseAIShortlist(user.id),
+          getFeaturedApplicantIds(applicantIds),
+        ]);
+
     const scoreMap = await getStoredMatchScores(
       [job.id],
       job.applications.map((application) => application.applicantId)
@@ -93,45 +113,38 @@ export async function GET(
 
       const matchScore = scoreMap.get(`${job.id}:${application.applicantId}`);
 
-      if (matchScore) {
+      const maskedApplicant = {
+        ...application.applicant,
+        phone: contactAllowed ? (application.applicant as any).phone : null,
+        whatsappNumber: contactAllowed ? (application.applicant as any).whatsappNumber : null,
+        contactHidden: !contactAllowed,
+        isFeatured: featuredIds.has(application.applicantId),
+        teacherProfile: application.applicant.teacherProfile
+          ? {
+              ...application.applicant.teacherProfile,
+              demoVideoUrl: application.applicant.teacherProfile.demoVideoUrl
+                ? getTeacherDocumentAccessPath("demo-video", application.applicantId)
+                : null,
+              lessonPlanUrl: application.applicant.teacherProfile.lessonPlanUrl
+                ? getTeacherDocumentAccessPath("lesson-plan", application.applicantId)
+                : null,
+            }
+          : null,
+      };
+
+      if (matchScore && aiAllowed) {
         rankedCandidates.push({
           ...application,
-          applicant: {
-            ...application.applicant,
-            teacherProfile: application.applicant.teacherProfile
-              ? {
-                  ...application.applicant.teacherProfile,
-                  demoVideoUrl: application.applicant.teacherProfile.demoVideoUrl
-                    ? getTeacherDocumentAccessPath("demo-video", application.applicantId)
-                    : null,
-                  lessonPlanUrl: application.applicant.teacherProfile.lessonPlanUrl
-                    ? getTeacherDocumentAccessPath("lesson-plan", application.applicantId)
-                    : null,
-                }
-              : null,
-          },
+          applicant: maskedApplicant,
           matchScore: matchScore.score,
           explanation: matchScore.explanation,
         });
       } else {
         rankedCandidates.push({
           ...application,
-          applicant: {
-            ...application.applicant,
-            teacherProfile: application.applicant.teacherProfile
-              ? {
-                  ...application.applicant.teacherProfile,
-                  demoVideoUrl: application.applicant.teacherProfile.demoVideoUrl
-                    ? getTeacherDocumentAccessPath("demo-video", application.applicantId)
-                    : null,
-                  lessonPlanUrl: application.applicant.teacherProfile.lessonPlanUrl
-                    ? getTeacherDocumentAccessPath("lesson-plan", application.applicantId)
-                    : null,
-                }
-              : null,
-          },
+          applicant: maskedApplicant,
           matchScore: 0,
-          explanation: "Match score refreshing",
+          explanation: aiAllowed ? "Match score refreshing" : "Upgrade to Growth plan to unlock AI match scores",
         });
       }
     }
@@ -140,8 +153,11 @@ export async function GET(
       rankedCandidates.sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
     } else if (sort === "applied_asc") {
       rankedCandidates.sort((a, b) => new Date(a.appliedAt).getTime() - new Date(b.appliedAt).getTime());
-    } else {
+    } else if (aiAllowed) {
       rankedCandidates.sort((a, b) => b.matchScore - a.matchScore);
+    } else {
+      // Fall back to newest-first when AI scores are unavailable
+      rankedCandidates.sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
     }
 
     const total = rankedCandidates.length;
@@ -155,6 +171,10 @@ export async function GET(
         limit,
         total,
         totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+      meta: {
+        aiAllowed,
+        contactHidden: !contactAllowed,
       },
     });
   } catch (error) {

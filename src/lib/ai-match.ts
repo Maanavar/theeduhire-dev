@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════
 
 import type { TeacherProfile, JobPosting, SchoolProfile, Board } from "@prisma/client";
+import { EXPERIENCE_LEVEL_TO_RANGE } from "@/config/constants";
 
 export interface MatchBreakdown {
   subject: number;
@@ -22,13 +23,23 @@ export interface MatchResult {
   explanation: string;
 }
 
-// Parse experience strings like "3-5 years" into [min, max] tuple
+// Parse experience strings like "3-6 years" or "Fresher" into [min, max] tuple
 function parseExperienceRange(exp: string | null | undefined): [number, number] | null {
   if (!exp) return null;
-  const match = exp.match(/(\d+)\s*-\s*(\d+)/);
+  if (/fresher/i.test(exp)) return [0, 1];
+  const match = exp.match(/(\d+)\s*[-–]\s*(\d+)/);
   if (match) return [parseInt(match[1], 10), parseInt(match[2], 10)];
+  const plus = exp.match(/(\d+)\+/);
+  if (plus) return [parseInt(plus[1], 10), 99];
   const single = exp.match(/(\d+)/);
   if (single) return [parseInt(single[1], 10), parseInt(single[1], 10)];
+  return null;
+}
+
+// Resolve experience string from enum when string field is blank
+function resolveJobExperience(job: JobPosting): string | null {
+  if (job.experience?.trim()) return job.experience;
+  if ((job as any).experienceLevel) return EXPERIENCE_LEVEL_TO_RANGE[(job as any).experienceLevel] ?? null;
   return null;
 }
 
@@ -156,7 +167,7 @@ export function computeMatchScore(
   const location = scoreLocation(teacher.city, job.school.city);
   const board = scoreBoard(teacher.preferredBoards || [], job.board);
   const salary = scoreSalary(teacher.expectedSalary, job.salaryMin, job.salaryMax);
-  const experience = scoreExperience(teacher.experience, job.experience);
+  const experience = scoreExperience(teacher.experience, resolveJobExperience(job));
   const tet = scoreTet((teacher as TeacherProfile & { tetStatus?: string | null }).tetStatus, (job as JobPosting & { requiresTet?: boolean | null }).requiresTet);
 
   // Weights

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, ToggleRight, ToggleLeft, Trash2, ExternalLink, Loader2, EyeOff, Eye } from "lucide-react";
+import { Search, ToggleRight, ToggleLeft, Trash2, ExternalLink, EyeOff, Eye } from "lucide-react";
 import Link from "next/link";
 import { toast } from "@/components/ui/toast";
 import { timeAgo } from "@/lib/utils";

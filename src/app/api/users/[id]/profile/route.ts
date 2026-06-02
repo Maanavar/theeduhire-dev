@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isTeacherFeatured } from "@/lib/subscription";
 
 export async function GET(
   _req: NextRequest,
@@ -60,14 +61,16 @@ export async function GET(
     }
 
     // Count resumes (don't expose URLs publicly)
-    const resumeCount = await prisma.resume.count({
-      where: { userId: id },
-    });
+    const [resumeCount, featured] = await Promise.all([
+      prisma.resume.count({ where: { userId: id } }),
+      isTeacherFeatured(id),
+    ]);
 
     const data = {
       user: {
         name: user.name,
         avatarUrl: user.avatarUrl,
+        isFeatured: featured,
       },
       profile: {
         qualification: profile.qualification,

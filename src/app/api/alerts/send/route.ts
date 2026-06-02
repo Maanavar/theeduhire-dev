@@ -10,11 +10,14 @@ import { sendJobAlertDigest } from "@/lib/email";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
+function isCronAuthorized(req: NextRequest): boolean {
+  if (!CRON_SECRET) return false;
+  return req.headers.get("x-cron-secret") === CRON_SECRET;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    // Verify cron secret for security
-    const authHeader = req.headers.get("authorization");
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
+    if (!isCronAuthorized(req)) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -28,6 +31,8 @@ export async function POST(req: NextRequest) {
       orConditions.push({ frequency: "WEEKLY_DIGEST" });
     }
 
+    // Process up to 500 alerts per run to cap memory usage. Any remainder is
+    // picked up in the next scheduled invocation (runs every 24h for daily alerts).
     const alerts = await prisma.jobAlert.findMany({
       where: {
         isActive: true,
@@ -38,6 +43,8 @@ export async function POST(req: NextRequest) {
           select: { id: true, email: true, name: true, whatsappNumber: true, whatsappOptin: true },
         },
       },
+      take: 500,
+      orderBy: { updatedAt: "asc" },
     });
 
     let sentCount = 0;
@@ -59,6 +66,7 @@ export async function POST(req: NextRequest) {
         if (alert.board) jobFilter.board = alert.board;
         if (alert.gradeLevel) jobFilter.gradeLevel = alert.gradeLevel;
         if (alert.jobType) jobFilter.jobType = alert.jobType;
+        if ((alert as any).experienceLevel) jobFilter.experienceLevel = (alert as any).experienceLevel;
 
         if (alert.salaryMin || alert.salaryMax) {
           jobFilter.AND = [];
@@ -106,9 +114,7 @@ export async function POST(req: NextRequest) {
           frequency: alert.frequency,
         });
 
-        if (alert.user.whatsappOptin && alert.user.whatsappNumber) {
-          console.log(`[WhatsApp stub] Would send to ${alert.user.whatsappNumber}: ${alert.name}`);
-        }
+        // WhatsApp delivery not yet wired — MSG91_AUTH_KEY pending.
 
         // Log to AlertHistory
         await prisma.alertHistory.create({

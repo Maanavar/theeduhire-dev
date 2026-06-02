@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -5,6 +6,32 @@ import { cacheTags } from "@/lib/cache-tags";
 import { FAQAccordion } from "@/components/marketing/faq-accordion";
 import { ScrollReveal } from "@/components/marketing/scroll-reveal";
 import { HomeHeroText } from "@/components/marketing/home-hero-text";
+import { PricingSection } from "@/components/marketing/pricing-section";
+
+const SITE_URL = "https://theeduhire.in";
+
+export const metadata: Metadata = {
+  title: "EduHire — Teaching Jobs in Tamil Nadu | CBSE, ICSE, State Board",
+  description:
+    "Find teaching jobs across Tamil Nadu. Verified schools, transparent salaries, TET/CTET-aware matching. Free for teachers. Serving Chennai, Coimbatore, Madurai and all districts.",
+  alternates: {
+    canonical: SITE_URL,
+  },
+  openGraph: {
+    title: "EduHire — Teaching Jobs in Tamil Nadu | CBSE, ICSE, State Board",
+    description:
+      "Verified schools, transparent salaries, smart teacher matching. Find your next teaching role in Tamil Nadu — free for teachers.",
+    url: SITE_URL,
+    type: "website",
+    images: [{ url: "/og-default.png", width: 1200, height: 630, alt: "EduHire — Teaching Jobs in Tamil Nadu" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "EduHire — Teaching Jobs in Tamil Nadu",
+    description: "Verified schools, transparent salaries. Free for teachers. Find your next teaching role in Tamil Nadu.",
+    images: ["/og-default.png"],
+  },
+};
 import {
   ArrowRight,
   BookOpen,
@@ -164,6 +191,8 @@ const FAQS = [
 export default async function HomePage() {
   const { jobCount, schoolCount } = await getStats();
 
+  const BASE = "https://theeduhire.in";
+
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
@@ -181,13 +210,19 @@ export default async function HomePage() {
     "@context": "https://schema.org",
     "@type": "Organization",
     "name": "EduHire",
-    "url": "https://theeduhire.in",
-    "logo": "https://theeduhire.in/logo.png",
-    "description": "Connecting passionate educators with leading schools across India through verified profiles and smart matching.",
+    "url": BASE,
+    "logo": `${BASE}/logo.png`,
+    "description": "Connecting teachers with verified schools across Tamil Nadu through transparent salaries, smart matching, and child-safe hiring.",
     "foundingDate": "2024",
     "address": {
       "@type": "PostalAddress",
+      "addressRegion": "Tamil Nadu",
       "addressCountry": "IN"
+    },
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "email": "hello@theeduhire.in",
+      "contactType": "customer support"
     },
     "sameAs": [
       "https://www.linkedin.com/company/eduhire",
@@ -195,10 +230,27 @@ export default async function HomePage() {
     ]
   };
 
+  const websiteJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "EduHire",
+    "url": BASE,
+    "description": "Teaching job portal for Tamil Nadu — verified schools, transparent salaries, free for teachers.",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": {
+        "@type": "EntryPoint",
+        "urlTemplate": `${BASE}/jobs?search={search_term_string}`
+      },
+      "query-input": "required name=search_term_string"
+    }
+  };
+
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }} />
       {/* ── HERO ─────────────────────────────────────────────────────────────── */}
       <section
         className="relative overflow-hidden border-b border-eh"
@@ -332,7 +384,7 @@ export default async function HomePage() {
         <div className="mx-auto max-w-[1160px]">
           <ScrollReveal className="max-w-[620px]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-brand-600)]">For schools</p>
-            <h2 className="mt-3 text-[clamp(1.9rem,3.2vw,2.8rem)] font-semibold leading-[1.08] tracking-[-0.04em] text-[var(--eh-text)]">
+            <h2 className="mt-3 font-display text-[clamp(1.9rem,3.2vw,2.8rem)] font-semibold leading-[1.08] tracking-[-0.04em] text-[var(--eh-text)]">
               Stop sorting through the wrong candidates.
             </h2>
             <p className="mt-4 max-w-[560px] text-[15px] leading-[1.8] text-[var(--eh-text-2)]">
@@ -372,7 +424,7 @@ export default async function HomePage() {
         <div className="mx-auto max-w-[1160px]">
           <ScrollReveal className="max-w-[620px]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-brand-600)]">For teachers</p>
-            <h2 className="mt-3 text-[clamp(1.9rem,3.2vw,2.8rem)] font-semibold leading-[1.08] tracking-[-0.04em] text-[var(--eh-text)]">
+            <h2 className="mt-3 font-display text-[clamp(1.9rem,3.2vw,2.8rem)] font-semibold leading-[1.08] tracking-[-0.04em] text-[var(--eh-text)]">
               Apply knowing exactly what you are walking into.
             </h2>
             <p className="mt-4 max-w-[560px] text-[15px] leading-[1.8] text-[var(--eh-text-2)]">
@@ -489,7 +541,7 @@ export default async function HomePage() {
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-brand-600)] text-white">
                     <ShieldCheck size={22} />
                   </div>
-                  <h2 className="mt-5 text-[clamp(1.5rem,2.4vw,2rem)] font-semibold leading-[1.15] tracking-[-0.04em] text-[var(--eh-text)]">
+                  <h2 className="mt-5 font-display text-[clamp(1.5rem,2.4vw,2rem)] font-semibold leading-[1.15] tracking-[-0.04em] text-[var(--eh-text)]">
                     Child-safety hiring is built in, not bolted on.
                   </h2>
                   <p className="mt-4 text-[15px] leading-[1.8] text-[var(--eh-text-2)]">
@@ -520,7 +572,7 @@ export default async function HomePage() {
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-[var(--color-brand-600)] ring-1 ring-[rgba(10,102,194,0.2)]">
                     <LockKeyhole size={22} />
                   </div>
-                  <h2 className="mt-5 text-[clamp(1.5rem,2.4vw,2rem)] font-semibold leading-[1.15] tracking-[-0.04em] text-[var(--eh-text)]">
+                  <h2 className="mt-5 font-display text-[clamp(1.5rem,2.4vw,2rem)] font-semibold leading-[1.15] tracking-[-0.04em] text-[var(--eh-text)]">
                     Your data stays yours. Always.
                   </h2>
                   <p className="mt-4 text-[15px] leading-[1.8] text-[var(--eh-text-2)]">
@@ -623,7 +675,7 @@ export default async function HomePage() {
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--color-brand-50)] text-[var(--color-brand-600)]">
                   <Calendar size={20} />
                 </div>
-                <h3 className="mt-5 text-[20px] font-semibold tracking-[-0.03em] text-[var(--eh-text)]">
+                <h3 className="mt-5 font-display text-[20px] font-semibold tracking-[-0.03em] text-[var(--eh-text)]">
                   Set your availability once. Schools find you.
                 </h3>
                 <p className="mt-3 text-[14.5px] leading-[1.8] text-[var(--eh-text-2)]">
@@ -654,7 +706,7 @@ export default async function HomePage() {
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--color-brand-50)] text-[var(--color-brand-600)]">
                   <Clock size={20} />
                 </div>
-                <h3 className="mt-5 text-[20px] font-semibold tracking-[-0.03em] text-[var(--eh-text)]">
+                <h3 className="mt-5 font-display text-[20px] font-semibold tracking-[-0.03em] text-[var(--eh-text)]">
                   Need a teacher urgently? Replacement pool ready.
                 </h3>
                 <p className="mt-3 text-[14.5px] leading-[1.8] text-[var(--eh-text-2)]">
@@ -682,6 +734,9 @@ export default async function HomePage() {
         </div>
       </section>
 
+            {/* ── PRICING ──────────────────────────────────────────────────────────── */}
+      <PricingSection />
+
       {/* ── FAQ ──────────────────────────────────────────────────────────────── */}
       <section id="questions" className="border-b border-eh bg-[var(--surface-base)] px-5 py-20 md:px-8 md:py-24">
         <div className="mx-auto max-w-[1120px]">
@@ -702,13 +757,15 @@ export default async function HomePage() {
         </div>
       </section>
 
+
+
       {/* ── CONTACT ──────────────────────────────────────────────────────────── */}
       <section id="contact" className="border-b border-eh bg-white px-5 py-20 md:px-8 md:py-24">
         <div className="mx-auto max-w-[1160px]">
           <div className="grid gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-16">
             <ScrollReveal>
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-brand-600)]">Get in touch</p>
-              <h2 className="mt-3 text-[clamp(1.7rem,2.9vw,2.4rem)] font-semibold leading-[1.12] tracking-[-0.04em] text-[var(--eh-text)]">
+              <h2 className="mt-3 font-display text-[clamp(1.7rem,2.9vw,2.4rem)] font-semibold leading-[1.12] tracking-[-0.04em] text-[var(--eh-text)]">
                 Questions? We respond personally.
               </h2>
               <p className="mt-4 text-[15px] leading-[1.8] text-[var(--eh-text-2)]">
@@ -732,7 +789,7 @@ export default async function HomePage() {
             <ScrollReveal delay={80}>
               <div className="rounded-[32px] border border-[var(--eh-border)] bg-[var(--surface-base)] p-6 md:p-8">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-brand-600)]">Contact</p>
-                <h2 className="mt-3 text-[clamp(1.5rem,2.4vw,1.9rem)] font-semibold leading-[1.2] tracking-[-0.04em] text-[var(--eh-text)]">
+                <h2 className="mt-3 font-display text-[clamp(1.5rem,2.4vw,1.9rem)] font-semibold leading-[1.2] tracking-[-0.04em] text-[var(--eh-text)]">
                   Write to us or start your free registration now.
                 </h2>
                 <p className="mt-4 text-[14.5px] leading-[1.8] text-[var(--eh-text-2)]">

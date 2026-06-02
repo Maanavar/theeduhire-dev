@@ -1,16 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BadgeCheck, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
+import { BadgeCheck, Pencil, Plus, Search, ShieldAlert, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { EmptyState, ErrorState, LoadingState } from "@/components/system/system-states";
 import { getApiErrorMessage } from "@/lib/api/client";
-import { getAdminTeachers, updateTeacherVerification } from "@/lib/api/admin-client";
+import { getAdminTeachers, updateTeacherVerification, adminDeleteTeacher } from "@/lib/api/admin-client";
 import type { AdminTeacher } from "@/lib/api/admin-client";
 import { timeAgo } from "@/lib/utils";
 import AdminActionModal from "@/components/admin/admin-action-modal";
 import type { AdminActionVariant } from "@/components/admin/admin-action-modal";
 import TeacherDetailDrawer from "@/components/admin/teacher-detail-drawer";
+import EditTeacherDrawer from "@/components/admin/edit-teacher-drawer";
+import CreateUserModal from "@/components/admin/create-user-modal";
 
 const PAGE_SIZE = 25;
 
@@ -42,6 +44,10 @@ export default function AdminTeachersPage() {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
   const [detailTeacher, setDetailTeacher] = useState<AdminTeacher | null>(null);
+  const [editTeacher, setEditTeacher] = useState<AdminTeacher | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<AdminTeacher | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchTeachers = useCallback(() => {
     setLoading(true);
@@ -123,6 +129,21 @@ export default function AdminTeachersPage() {
     setPendingAction(configs[action]);
   };
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await adminDeleteTeacher(deleteTarget.userId);
+      toast.success(`${deleteTarget.user.name} deleted`);
+      setDeleteTarget(null);
+      fetchTeachers();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Delete failed"));
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const handleModalConfirm = async ({ reason, notes }: { reason?: string; notes?: string }) => {
     if (!pendingAction) return;
     const { teacher, action } = pendingAction;
@@ -148,11 +169,19 @@ export default function AdminTeachersPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-[40px] font-semibold tracking-[-0.03em] text-[var(--eh-text)]">Teacher verification</h1>
-        <p className="mt-0.5 text-[14px] text-[var(--eh-text-3)]">
-          Review teacher passports, grant trust badges, and pause unsafe accounts from one queue.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[40px] font-semibold tracking-[-0.03em] text-[var(--eh-text)]">Teacher management</h1>
+          <p className="mt-0.5 text-[14px] text-[var(--eh-text-3)]">
+            Review teacher passports, grant trust badges, and manage accounts.
+          </p>
+        </div>
+        <button
+          onClick={() => setCreateOpen(true)}
+          className="flex shrink-0 items-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-brand-600 mt-2"
+        >
+          <Plus size={14} /> Add teacher
+        </button>
       </div>
 
       <div className="mb-5 flex flex-wrap gap-3">
@@ -256,6 +285,20 @@ export default function AdminTeachersPage() {
                         Suspend
                       </button>
                     )}
+                    <button
+                      onClick={() => setEditTeacher(teacher)}
+                      className="rounded-lg bg-[var(--surface-base)] px-2.5 py-1.5 text-[var(--eh-text-2)] hover:bg-white"
+                      title="Edit"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget(teacher)}
+                      className="rounded-lg bg-red-50 px-2.5 py-1.5 text-red-500 hover:bg-red-100"
+                      title="Delete"
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -298,6 +341,34 @@ export default function AdminTeachersPage() {
         teacher={detailTeacher}
         onClose={() => setDetailTeacher(null)}
       />
+
+      {/* Edit teacher drawer */}
+      <EditTeacherDrawer
+        teacher={editTeacher}
+        onClose={() => setEditTeacher(null)}
+        onSaved={fetchTeachers}
+      />
+
+      {/* Create teacher modal */}
+      <CreateUserModal
+        open={createOpen}
+        defaultRole="TEACHER"
+        onClose={() => setCreateOpen(false)}
+        onCreated={fetchTeachers}
+      />
+
+      {/* Delete confirmation */}
+      {deleteTarget && (
+        <AdminActionModal
+          open={true}
+          title={`Delete ${deleteTarget.user.name}?`}
+          description="This will permanently delete the teacher account and all associated applications, alerts, and data. This cannot be undone."
+          variant={{ kind: "confirm", message: `Permanently delete "${deleteTarget.user.name}" (${deleteTarget.user.email})?`, confirmLabel: "Delete account", danger: true }}
+          loading={deleteLoading}
+          onConfirm={handleDelete}
+          onClose={() => { if (!deleteLoading) setDeleteTarget(null); }}
+        />
+      )}
     </div>
   );
 }

@@ -34,17 +34,29 @@ export const JOB_TYPES = [
 ] as const;
 
 export const EXPERIENCE_LEVELS = [
-  "Fresher", "1-3 years", "2-4 years", "2-5 years",
-  "3-5 years", "5+ years", "10+ years",
+  "Fresher",
+  "1-3 years",
+  "3-6 years",
+  "6-10 years",
+  "10+ years",
 ] as const;
 
 export const JOB_EXPERIENCE_LEVELS = [
   { value: "FRESHER", label: "Fresher" },
-  { value: "ONE_TO_TWO_YEARS", label: "1-2 years" },
-  { value: "TWO_TO_FIVE_YEARS", label: "2-5 years" },
-  { value: "FIVE_TO_TEN_YEARS", label: "5-10 years" },
+  { value: "ONE_TO_TWO_YEARS", label: "1-3 years" },
+  { value: "TWO_TO_FIVE_YEARS", label: "3-6 years" },
+  { value: "FIVE_TO_TEN_YEARS", label: "6-10 years" },
   { value: "TEN_PLUS_YEARS", label: "10+ years" },
 ] as const;
+
+// Maps experienceLevel enum to the string range used by the AI matcher
+export const EXPERIENCE_LEVEL_TO_RANGE: Record<string, string> = {
+  FRESHER: "Fresher",
+  ONE_TO_TWO_YEARS: "1-3 years",
+  TWO_TO_FIVE_YEARS: "3-6 years",
+  FIVE_TO_TEN_YEARS: "6-10 years",
+  TEN_PLUS_YEARS: "10+ years",
+};
 
 export const APPLICATION_STATUSES = [
   { value: "PENDING", label: "Pending", color: "gray" },
@@ -88,3 +100,10 @@ export const CONTACT_FORM_IP_LIMIT = 5;
 export const MESSAGE_CREATE_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 export const MESSAGE_CREATE_RATE_LIMIT = 20;
 export const JOBS_PER_PAGE = 20;
+export const JOB_POST_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+export const JOB_POST_USER_LIMIT = 10;
+export const AI_IMPROVE_JOB_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+export const AI_IMPROVE_JOB_USER_LIMIT = 20;
+
+export const MANAGED_RECRUITMENT_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+export const MANAGED_RECRUITMENT_IP_LIMIT = 3;

@@ -36,20 +36,42 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const job = await prisma.jobPosting.findUnique({
     where: { id },
-    include: { school: { select: { schoolName: true, city: true } } },
+    include: { school: { select: { schoolName: true, city: true, board: true } } },
   });
 
   if (!job) return { title: "Job Not Found" };
 
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://theeduhire.in";
+  const canonicalUrl = `${baseUrl}/jobs/${id}`;
+
+  const salaryHint =
+    job.salaryMin && job.salaryMax
+      ? ` Salary ₹${job.salaryMin.toLocaleString("en-IN")}–₹${job.salaryMax.toLocaleString("en-IN")}/mo.`
+      : job.salaryMin
+        ? ` Salary from ₹${job.salaryMin.toLocaleString("en-IN")}/mo.`
+        : "";
+
+  const description =
+    `${job.title} at ${job.school.schoolName}, ${job.school.city}.${salaryHint} ${job.description.slice(0, 110).trim()}`.slice(0, 160);
+
+  const ogTitle = `${job.title} — ${job.school.schoolName}, ${job.school.city} | EduHire`;
+
   return {
-    title: `${job.title} at ${job.school.schoolName}`,
-    description: job.description.slice(0, 160),
+    title: `${job.title} at ${job.school.schoolName}, ${job.school.city}`,
+    description,
     alternates: {
-      canonical: `/jobs/${id}`,
+      canonical: canonicalUrl,
     },
     openGraph: {
-      title: `${job.title} - ${job.school.schoolName}, ${job.school.city}`,
-      description: job.description.slice(0, 160),
+      title: ogTitle,
+      description,
+      url: canonicalUrl,
+      type: "website",
+    },
+    twitter: {
+      card: "summary",
+      title: ogTitle,
+      description,
     },
   };
 }

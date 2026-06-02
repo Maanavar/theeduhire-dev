@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Search, Building2, GraduationCap, Briefcase, Clock, Filter, ChevronDown } from "lucide-react";
+import { Search, Building2, GraduationCap, Briefcase, Clock, ChevronDown } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { EmptyState, ErrorState, LoadingState } from "@/components/system/system-states";
 import { toast } from "@/components/ui/toast";

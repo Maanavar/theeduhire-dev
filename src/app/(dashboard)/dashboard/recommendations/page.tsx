@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import JobDetailPanel from '@/components/jobs/job-detail-panel';
 import { MatchScoreBadge } from '@/components/recommendations/match-score-badge';
-import { EmptyState, ErrorState, LoadingState } from '@/components/system/system-states';
+import { EmptyState, ErrorState } from '@/components/system/system-states';
+import { CardListSkeleton } from '@/components/system/dashboard-skeletons';
 import type { JobRecommendation } from '@/types';
 import { getApiErrorMessage } from '@/lib/api/client';
 import { getRecommendations } from '@/lib/api/teacher-client';
@@ -111,7 +112,7 @@ export default function RecommendationsPage() {
     : 0;
 
   if (loading) {
-    return <LoadingState title="Loading recommendations" message="Scoring teaching roles against your profile." />;
+    return <CardListSkeleton cards={5} />;
   }
 
   if (error) {

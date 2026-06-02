@@ -7,6 +7,8 @@ import { getSession } from "@/lib/session";
 import { updateJobSchema } from "@/lib/validators/job";
 import { sanitizePlainText } from "@/lib/sanitize";
 import { computeMatchScore } from "@/lib/ai-match";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { JOB_POST_RATE_LIMIT_WINDOW_MS, JOB_POST_USER_LIMIT } from "@/config/constants";
 import { getStoredMatchScores } from "@/lib/match-score-read-model";
 import { canManageJob } from "@/lib/policies/job-policy";
 import { getSchoolProfileIdForUser } from "@/lib/policies/application-policy";
@@ -58,6 +60,7 @@ export async function GET(
             paymentTrackRecord: true,
             workingHours: true,
             udiseCode: true,
+            isOfflineManaged: true,
             user: { select: { isSuspended: true } },
           },
         },
@@ -86,7 +89,8 @@ export async function GET(
       );
     }
     const canBypassModeration = session?.user?.role === "ADMIN" || session?.user?.role === "SCHOOL_ADMIN";
-    if ((job.isHidden || job.school.user.isSuspended) && !canBypassModeration) {
+    const schoolSuspended = job.school.user.isSuspended && !job.school.isOfflineManaged;
+    if ((job.isHidden || schoolSuspended) && !canBypassModeration) {
       return NextResponse.json(
         { success: false, error: "Job not found" },
         { status: 404 }
@@ -194,6 +198,20 @@ export async function PUT(
     }
     if (session.user.role !== "SCHOOL_ADMIN" && session.user.role !== "ADMIN") {
       return NextResponse.json({ success: false, error: "Insufficient permissions" }, { status: 403 });
+    }
+
+    const rateLimit = await checkRateLimit({
+      key: `jobs.edit:${session.user.id}`,
+      action: "jobs.edit",
+      actorKey: session.user.id,
+      limit: JOB_POST_USER_LIMIT,
+      windowMs: JOB_POST_RATE_LIMIT_WINDOW_MS,
+    });
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many job edits. Please try again later." },
+        { status: 429 }
+      );
     }
 
     const job = await prisma.jobPosting.findUnique({

@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/session";
 import { canManageJob } from "@/lib/policies/job-policy";
 import { getSchoolProfileIdForUser } from "@/lib/policies/application-policy";
 import { getTeacherDocumentAccessPath } from "@/lib/storage";
+import { canViewContactDetails } from "@/lib/subscription";
 
 export async function GET(
   req: NextRequest,
@@ -33,6 +34,9 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
     }
 
+    // ADMIN always gets contact details; schools need Growth+ plan
+    const contactAllowed = auth.user.role === "ADMIN" || await canViewContactDetails(auth.user.id);
+
     const applications = await prisma.application.findMany({
       where: { jobId },
       include: {
@@ -48,6 +52,7 @@ export async function GET(
             name: true,
             email: true,
             phone: true,
+            avatarUrl: true,
             teacherProfile: {
               select: {
                 qualification: true,
@@ -70,6 +75,12 @@ export async function GET(
         ...application,
         applicant: {
           ...application.applicant,
+          // Contact details gated to Growth+ plan
+          phone: contactAllowed ? application.applicant.phone : null,
+          whatsappNumber: (application.applicant as any).whatsappNumber
+            ? contactAllowed ? (application.applicant as any).whatsappNumber : null
+            : null,
+          contactHidden: !contactAllowed,
           teacherProfile: application.applicant.teacherProfile
             ? {
                 ...application.applicant.teacherProfile,
@@ -83,6 +94,7 @@ export async function GET(
             : null,
         },
       })),
+      meta: { contactHidden: !contactAllowed },
     });
   } catch (error) {
     console.error("GET /api/jobs/[id]/applicants error:", error);

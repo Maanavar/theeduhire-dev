@@ -212,6 +212,7 @@ export default function ProfilePage() {
       const { percentage } = calculateProfileCompletion(data);
       setCompletion(percentage);
       maybeTrackProfileCompleted(percentage);
+      window.dispatchEvent(new Event("profile-updated"));
       toast.success(successMessage);
     } catch (error) {
       if (error instanceof ApiRequestError) {
@@ -269,6 +270,7 @@ export default function ProfilePage() {
       experiences: [exp, ...(profileData?.experiences || [])],
     });
     setCompletion(percentage);
+    window.dispatchEvent(new Event("profile-updated"));
   };
 
   const handleExperienceDeleted = (id: string) => {
@@ -279,6 +281,7 @@ export default function ProfilePage() {
         experiences: prev.experiences?.filter((e) => e.id !== id) || [],
       };
       setCompletion(calculateProfileCompletion(next).percentage);
+      window.dispatchEvent(new Event("profile-updated"));
       return next;
     });
   };
@@ -297,6 +300,7 @@ export default function ProfilePage() {
       certifications: [cert, ...(profileData?.certifications || [])],
     });
     setCompletion(percentage);
+    window.dispatchEvent(new Event("profile-updated"));
   };
 
   const handleCertificationDeleted = (id: string) => {
@@ -307,6 +311,7 @@ export default function ProfilePage() {
         certifications: prev.certifications?.filter((c) => c.id !== id) || [],
       };
       setCompletion(calculateProfileCompletion(next).percentage);
+      window.dispatchEvent(new Event("profile-updated"));
       return next;
     });
   };
@@ -325,6 +330,7 @@ export default function ProfilePage() {
       resumes: profileData?.resumes?.filter((r) => r.id !== id) || [],
     });
     setCompletion(percentage);
+    window.dispatchEvent(new Event("profile-updated"));
   };
 
   const openExperienceCreateModal = () => {
@@ -1058,61 +1064,55 @@ export default function ProfilePage() {
 
         <aside className="self-start xl:sticky xl:top-24">
           <div className="space-y-4">
-            <Panel className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-3)]">Profile plan</p>
-                  <h2 className="mt-1 text-[15px] font-semibold text-[var(--eh-text)]">Complete the profile in order</h2>
+            {completedSections < profileSections.length && (
+              <Panel className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-3)]">Profile plan</p>
+                    <h2 className="mt-1 text-[15px] font-semibold text-[var(--eh-text)]">Complete the profile in order</h2>
+                  </div>
+                  <span className="rounded-full bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-700">
+                    {completedSections}/{profileSections.length}
+                  </span>
                 </div>
-                <span className="rounded-full bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-700">
-                  {completedSections}/{profileSections.length}
-                </span>
-              </div>
-              <div className="mt-3 space-y-2">
-                {profileSections.map((section, index) => (
-                  <button
-                    key={section.id}
-                    type="button"
-                    onClick={() => setActiveSection(section.id)}
-                    className="flex w-full items-start gap-3 rounded-xl border border-[var(--eh-border)] px-3 py-3 text-left transition-colors hover:bg-[var(--surface-base)]"
-                  >
-                    <span className={cn(
-                      "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
-                      section.done ? "bg-brand-500 text-white" : "bg-[var(--surface-base)] text-[var(--eh-text-3)]"
-                    )}>
-                      {section.done ? "✓" : index + 1}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-[13px] font-semibold text-[var(--eh-text)]">{section.label}</span>
-                      <span className="mt-0.5 block text-[12px] leading-relaxed text-[var(--eh-text-3)]">{section.description}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </Panel>
+                <div className="mt-3 space-y-2">
+                  {profileSections.map((section, index) => (
+                    <button
+                      key={section.id}
+                      type="button"
+                      onClick={() => setActiveSection(section.id)}
+                      className="flex w-full items-start gap-3 rounded-xl border border-[var(--eh-border)] px-3 py-3 text-left transition-colors hover:bg-[var(--surface-base)]"
+                    >
+                      <span className={cn(
+                        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                        section.done ? "bg-brand-500 text-white" : "bg-[var(--surface-base)] text-[var(--eh-text-3)]"
+                      )}>
+                        {section.done ? "✓" : index + 1}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[13px] font-semibold text-[var(--eh-text)]">{section.label}</span>
+                        <span className="mt-0.5 block text-[12px] leading-relaxed text-[var(--eh-text-3)]">{section.description}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </Panel>
+            )}
 
-            <Panel className="p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-[15px] font-semibold text-[var(--eh-text)]">Readiness</h2>
-                <span className="text-[13px] font-semibold text-brand-600">{completion}%</span>
-              </div>
-              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--surface-base)]">
-                <div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${completion}%` }} />
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] text-[var(--eh-text-3)]">
-                <div className="rounded-lg bg-[var(--surface-base)] px-3 py-2">
-                  <p className="text-[11px] uppercase tracking-[0.06em] text-[var(--eh-text-4)]">Experience</p>
-                  <p className="mt-1 font-medium text-[var(--eh-text-2)]">{profileData?.experiences?.length || 0} entries</p>
+            {completion < 100 && (
+              <Panel className="p-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-[15px] font-semibold text-[var(--eh-text)]">Readiness</h2>
+                  <span className="text-[13px] font-semibold text-brand-600">{completion}%</span>
                 </div>
-                <div className="rounded-lg bg-[var(--surface-base)] px-3 py-2">
-                  <p className="text-[11px] uppercase tracking-[0.06em] text-[var(--eh-text-4)]">Resume</p>
-                  <p className="mt-1 font-medium text-[var(--eh-text-2)]">{profileData?.resumes?.length ? "Uploaded" : "Missing"}</p>
+                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--surface-base)]">
+                  <div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${completion}%` }} />
                 </div>
-              </div>
-              <p className="mt-3 text-[12px] leading-relaxed text-[var(--eh-text-3)]">
-                Schools respond faster when your bio, specialisations, and resume are all complete.
-              </p>
-            </Panel>
+                <p className="mt-3 text-[12px] leading-relaxed text-[var(--eh-text-3)]">
+                  Schools respond faster when your bio, specialisations, and resume are all complete.
+                </p>
+              </Panel>
+            )}
 
             <Panel className="p-4">
               <div className="flex items-center justify-between">

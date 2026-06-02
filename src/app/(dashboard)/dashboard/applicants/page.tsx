@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { Calendar, Download, Loader2, MapPin, MessageSquare, Send, ShieldCheck, Star, XCircle } from "lucide-react";
+import { Calendar, Download, Lock, Loader2, Mail, MapPin, MessageSquare, Phone, Send, ShieldCheck, Star, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { featureFlags } from "@/config/feature-flags";
 import { ScheduleInterviewModal } from "@/components/interviews/schedule-interview-modal";
@@ -23,8 +23,9 @@ import {
   type SchoolJobSummary,
 } from "@/lib/api/hiring-client";
 import { FilterBar, Metric, PageHeader, PageShell, Panel, StatusBadge, Toolbar } from "@/components/layout/page-shell";
+import { EXPERIENCE_LEVELS } from "@/config/constants";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
-const avatarColors = ["#4338ca", "#0f766e", "#be185d", "#b45309", "#0e7490", "#9a3412"];
 const statusLabel: Record<string, string> = {
   PENDING: "NEW",
   REVIEWED: "REVIEWED",
@@ -56,11 +57,7 @@ type ApplicantUpdateStatus =
   | "INTERVIEW_COMPLETED";
 const sortOptions: ApplicantSort[] = ["MATCH_DESC", "APPLIED_DESC", "APPLIED_ASC"];
 
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
-}
+
 
 export default function ApplicantsBoardPage() {
   const searchParams = useSearchParams();
@@ -83,7 +80,10 @@ export default function ApplicantsBoardPage() {
   const [notesDraft, setNotesDraft] = useState<Record<string, string>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [contactHidden, setContactHidden] = useState(false);
+  const [aiAllowed, setAiAllowed] = useState(true);
   const [scheduleApplicationId, setScheduleApplicationId] = useState<string | null>(null);
+  const [experienceFilter, setExperienceFilter] = useState("");
   const preselectedJobId = searchParams.get("jobId") || "";
   const prefilledSearch = searchParams.get("search") || "";
 
@@ -93,8 +93,10 @@ export default function ApplicantsBoardPage() {
   );
 
   const loadCandidates = useCallback(async (jobId: string) => {
-    const allCandidates = await getAllRankedCandidates(jobId);
-    setCandidates(allCandidates);
+    const result = await getAllRankedCandidates(jobId);
+    setCandidates(result.candidates);
+    setContactHidden(result.contactHidden);
+    setAiAllowed(result.aiAllowed);
     setLastSyncedAt(Date.now());
   }, []);
 
@@ -191,7 +193,10 @@ export default function ApplicantsBoardPage() {
         candidate.applicant.name.toLowerCase().includes(q) ||
         candidate.applicant.teacherProfile?.city?.toLowerCase().includes(q) ||
         candidate.applicant.teacherProfile?.subjects?.join(" ").toLowerCase().includes(q);
-      return byTab && byQuery;
+      const byExperience =
+        !experienceFilter ||
+        candidate.applicant.teacherProfile?.experience === experienceFilter;
+      return byTab && byQuery && byExperience;
     });
 
     if (sortBy === "MATCH_DESC") next.sort((a, b) => b.matchScore - a.matchScore);
@@ -202,7 +207,7 @@ export default function ApplicantsBoardPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, sortBy, tab, selectedJobId]);
+  }, [search, sortBy, tab, selectedJobId, experienceFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pagedCandidates = useMemo(
@@ -459,6 +464,16 @@ export default function ApplicantsBoardPage() {
             <option value="APPLIED_DESC">Sort: Applied date (newest)</option>
             <option value="APPLIED_ASC">Sort: Applied date (oldest)</option>
           </select>
+          <select
+            value={experienceFilter}
+            onChange={(event) => setExperienceFilter(event.target.value)}
+            className="input-base max-w-[180px]"
+          >
+            <option value="">All experience</option>
+            {EXPERIENCE_LEVELS.map((level) => (
+              <option key={level} value={level}>{level}</option>
+            ))}
+          </select>
           <div className="flex flex-wrap gap-2">
             {Object.entries(groupedCounts).map(([key, count]) => (
               <button
@@ -503,6 +518,18 @@ export default function ApplicantsBoardPage() {
         </Panel>
       ) : null}
 
+      {/* AI scores banner — contact details are now shown inline per card */}
+      {!loading && !error && !aiAllowed && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-brand-200)] bg-[var(--color-brand-50)] px-4 py-3">
+          <p className="text-[13px] text-[var(--color-brand-800)]">
+            <span className="font-semibold">AI match scores are locked.</span> Upgrade to Growth to rank candidates by subject, board, and grade fit.
+          </p>
+          <Link href="/dashboard/subscription" className="eh-btn eh-btn-primary eh-btn-sm shrink-0">
+            Upgrade to Growth
+          </Link>
+        </div>
+      )}
+
       {loading ? (
         <RowsSkeleton rows={5} />
       ) : error ? (
@@ -541,7 +568,7 @@ export default function ApplicantsBoardPage() {
       ) : (
         <>
           <div className="grid gap-3 xl:grid-cols-2">
-            {pagedCandidates.map((candidate, idx) => {
+            {pagedCandidates.map((candidate) => {
               const profile = candidate.applicant.teacherProfile;
               const name = candidate.applicant.name;
               const badge = statusLabel[candidate.status] || "NEW";
@@ -557,22 +584,27 @@ export default function ApplicantsBoardPage() {
                       }
                       className="mt-1 h-4 w-4 rounded border-gray-300"
                     />
-                    <span
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[13px] font-semibold text-white"
-                      style={{ background: avatarColors[idx % avatarColors.length] }}
-                    >
-                      {initials(name)}
-                    </span>
+                    <UserAvatar
+                      name={name}
+                      avatarUrl={(candidate.applicant as any).avatarUrl}
+                      size={44}
+                    />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <h3 className="truncate text-[25px] font-semibold tracking-[-0.01em] text-eh-text">{name}</h3>
+                        {(candidate.applicant as any).isFeatured && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 ring-1 ring-amber-200">
+                            <Star size={9} className="fill-amber-500 text-amber-500" />
+                            Featured
+                          </span>
+                        )}
                         {profile?.safetyBadgeGranted ? <ShieldCheck size={16} className="text-green-600" /> : null}
                         <StatusBadge role="status" aria-label={`Application status: ${badge}`} tone={statusTone[badge] || "neutral"}>
                           {badge}
                         </StatusBadge>
                       </div>
                       <p className="text-[13px] text-eh-text3">
-                        {profile?.subjects?.[0] || "Teacher"} | {profile?.experience || "Experienced"} | Applied{" "}
+                        {profile?.subjects?.[0] || "Teacher"}{profile?.experience ? ` | ${profile.experience}` : ""} | Applied{" "}
                         {new Date(candidate.appliedAt).toLocaleDateString("en-IN")}
                       </p>
                       <p className="mt-1 inline-flex items-center gap-1 text-[12px] text-eh-text3">
@@ -601,6 +633,66 @@ export default function ApplicantsBoardPage() {
                     <span className="eh-chip">{profile?.city || "Location"}</span>
                     {profile?.demoVideoUrl ? <span className="eh-chip">Demo available</span> : null}
                   </div>
+
+                  {/* ── Contact details ── */}
+                  {contactHidden ? (
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-[var(--eh-border)] bg-[var(--surface-base)] px-3 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                          <Lock size={12} className="text-amber-600" />
+                        </div>
+                        <div>
+                          <p className="text-[12px] font-semibold text-[var(--eh-text)]">Contact details locked</p>
+                          <div className="mt-0.5 flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1 rounded bg-[var(--eh-border)] px-1.5 py-0.5 text-[11px] text-[var(--eh-text-3)] blur-[3px] select-none">
+                              <Phone size={9} /> +91 98765 43210
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded bg-[var(--eh-border)] px-1.5 py-0.5 text-[11px] text-[var(--eh-text-3)] blur-[3px] select-none">
+                              <Mail size={9} /> teacher@...
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <Link
+                        href="/dashboard/subscription"
+                        className="eh-btn eh-btn-sm shrink-0 border-amber-300 bg-amber-600 text-white hover:bg-amber-700"
+                      >
+                        Unlock Growth
+                      </Link>
+                    </div>
+                  ) : (
+                    (() => {
+                      const phone = (candidate.applicant as any).phone;
+                      const whatsapp = (candidate.applicant as any).whatsappNumber;
+                      const email = (candidate.applicant as any).email;
+                      if (!phone && !whatsapp && !email) return null;
+                      return (
+                        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
+                          <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-600">Contact</span>
+                          {email && (
+                            <a href={`mailto:${email}`} className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[12px] font-medium text-emerald-700 hover:underline">
+                              <Mail size={11} /> {email}
+                            </a>
+                          )}
+                          {phone && (
+                            <a href={`tel:${phone}`} className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[12px] font-medium text-emerald-700 hover:underline">
+                              <Phone size={11} /> {phone}
+                            </a>
+                          )}
+                          {whatsapp && (
+                            <a
+                              href={`https://wa.me/${whatsapp.replace(/\D/g, "")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-0.5 text-[12px] font-medium text-white hover:bg-emerald-700"
+                            >
+                              WhatsApp
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })()
+                  )}
 
                   <div className="mt-3 grid gap-2 md:grid-cols-2">
                     <select
