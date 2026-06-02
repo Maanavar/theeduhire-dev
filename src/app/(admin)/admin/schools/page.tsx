@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, BadgeCheck, ShieldOff, Loader2 } from "lucide-react";
+import { Search, BadgeCheck, ShieldOff, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { getBoardLabel, timeAgo } from "@/lib/utils";
 import { EmptyState, ErrorState, LoadingState } from "@/components/system/system-states";
 import { getApiErrorMessage } from "@/lib/api/client";
-import { getAdminSchools, updateSchoolVerification } from "@/lib/api/admin-client";
+import { getAdminSchools, updateSchoolVerification, adminDeleteSchool } from "@/lib/api/admin-client";
 import type { AdminSchool } from "@/lib/api/admin-client";
 import AdminActionModal from "@/components/admin/admin-action-modal";
 import type { AdminActionVariant } from "@/components/admin/admin-action-modal";
 import SchoolDetailDrawer from "@/components/admin/school-detail-drawer";
+import EditSchoolDrawer from "@/components/admin/edit-school-drawer";
+import CreateUserModal from "@/components/admin/create-user-modal";
 
 const PAGE_SIZE = 25;
 
@@ -38,10 +40,13 @@ export default function AdminSchoolsPage() {
   const [verifiedFilter, setVerifiedFilter] = useState("");
   const [verificationStatusFilter, setVerificationStatusFilter] = useState("");
   const [page, setPage] = useState(1);
-  const [actionId, setActionId] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
   const [detailSchool, setDetailSchool] = useState<AdminSchool | null>(null);
+  const [editSchool, setEditSchool] = useState<AdminSchool | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<AdminSchool | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchSchools = useCallback(() => {
     setLoading(true);
@@ -158,17 +163,40 @@ export default function AdminSchoolsPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await adminDeleteSchool(deleteTarget.id);
+      toast.success(`${deleteTarget.schoolName} deleted`);
+      setDeleteTarget(null);
+      fetchSchools();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Delete failed"));
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const verifiedCount = schools.filter((school) => school.verified).length;
   const pendingCount = schools.filter((school) => school.verificationStatus === "PENDING").length;
   const activeSchools = schools.filter((school) => school._count.jobPostings > 0).length;
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-[40px] font-semibold tracking-[-0.03em] text-[var(--eh-text)]">School management</h1>
-        <p className="mt-0.5 text-[14px] text-[var(--eh-text-3)]">
-          Verify institutions, inspect activity, and resolve trust signals from one queue.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[40px] font-semibold tracking-[-0.03em] text-[var(--eh-text)]">School management</h1>
+          <p className="mt-0.5 text-[14px] text-[var(--eh-text-3)]">
+            Verify institutions, inspect activity, and manage accounts.
+          </p>
+        </div>
+        <button
+          onClick={() => setCreateOpen(true)}
+          className="flex shrink-0 items-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-brand-600 mt-2"
+        >
+          <Plus size={14} /> Add school
+        </button>
       </div>
 
       <div className="mb-5 grid gap-3 md:grid-cols-3">
@@ -285,47 +313,55 @@ export default function AdminSchoolsPage() {
                         : "Unverified"}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 md:justify-end">
-                    {actionId === school.id ? (
-                      <Loader2 size={16} className="mx-2 animate-spin text-[var(--eh-text-4)]" />
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => openAction(school,
-                            school.verificationStatus === "PENDING" ? "approve"
-                              : school.verificationStatus === "VERIFIED" ? "unverify"
-                              : "verify"
-                          )}
-                          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                            school.verificationStatus === "PENDING"
-                              ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
-                              : school.verificationStatus === "VERIFIED"
-                                ? "bg-red-50 text-red-600 hover:bg-red-100"
-                                : "bg-green-50 text-green-700 hover:bg-green-100"
-                          }`}
-                        >
-                          {school.verificationStatus === "PENDING" ? (
-                            <><BadgeCheck size={13} /> Approve</>
-                          ) : school.verificationStatus === "VERIFIED" ? (
-                            <><ShieldOff size={13} /> Remove verification</>
-                          ) : (
-                            <><BadgeCheck size={13} /> Verify</>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => openAction(school, "reject")}
-                          className="rounded-lg bg-red-50 px-3 py-1.5 text-[12px] font-medium text-red-600 hover:bg-red-100"
-                        >
-                          Reject
-                        </button>
-                        <button
-                          onClick={() => openAction(school, school.user.isSuspended ? "unsuspend" : "suspend")}
-                          className="rounded-lg bg-[var(--surface-base)] px-3 py-1.5 text-[12px] font-medium text-[var(--eh-text-2)] hover:bg-white"
-                        >
-                          {school.user.isSuspended ? "Unsuspend" : "Suspend"}
-                        </button>
-                      </>
-                    )}
+                  <div className="flex items-center gap-1.5 md:justify-end flex-wrap">
+                    <button
+                      onClick={() => openAction(school,
+                        school.verificationStatus === "PENDING" ? "approve"
+                          : school.verificationStatus === "VERIFIED" ? "unverify"
+                          : "verify"
+                      )}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                        school.verificationStatus === "PENDING"
+                          ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                          : school.verificationStatus === "VERIFIED"
+                            ? "bg-red-50 text-red-600 hover:bg-red-100"
+                            : "bg-green-50 text-green-700 hover:bg-green-100"
+                      }`}
+                    >
+                      {school.verificationStatus === "PENDING" ? (
+                        <><BadgeCheck size={13} /> Approve</>
+                      ) : school.verificationStatus === "VERIFIED" ? (
+                        <><ShieldOff size={13} /> Remove verification</>
+                      ) : (
+                        <><BadgeCheck size={13} /> Verify</>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => openAction(school, "reject")}
+                      className="rounded-lg bg-red-50 px-3 py-1.5 text-[12px] font-medium text-red-600 hover:bg-red-100"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => openAction(school, school.user.isSuspended ? "unsuspend" : "suspend")}
+                      className="rounded-lg bg-[var(--surface-base)] px-3 py-1.5 text-[12px] font-medium text-[var(--eh-text-2)] hover:bg-white"
+                    >
+                      {school.user.isSuspended ? "Unsuspend" : "Suspend"}
+                    </button>
+                    <button
+                      onClick={() => setEditSchool(school)}
+                      className="rounded-lg bg-[var(--surface-base)] px-2.5 py-1.5 text-[var(--eh-text-2)] hover:bg-white"
+                      title="Edit"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget(school)}
+                      className="rounded-lg bg-red-50 px-2.5 py-1.5 text-red-500 hover:bg-red-100"
+                      title="Delete"
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -376,6 +412,34 @@ export default function AdminSchoolsPage() {
         school={detailSchool}
         onClose={() => setDetailSchool(null)}
       />
+
+      {/* Edit school drawer */}
+      <EditSchoolDrawer
+        school={editSchool}
+        onClose={() => setEditSchool(null)}
+        onSaved={fetchSchools}
+      />
+
+      {/* Create school modal */}
+      <CreateUserModal
+        open={createOpen}
+        defaultRole="SCHOOL_ADMIN"
+        onClose={() => setCreateOpen(false)}
+        onCreated={fetchSchools}
+      />
+
+      {/* Delete confirmation */}
+      {deleteTarget && (
+        <AdminActionModal
+          open={true}
+          title={`Delete "${deleteTarget.schoolName}"?`}
+          description="This will permanently delete the school account and all job postings, applications, and data associated with it. This cannot be undone."
+          variant={{ kind: "confirm", message: `Permanently delete "${deleteTarget.schoolName}" (${deleteTarget.user.email})?`, confirmLabel: "Delete school", danger: true }}
+          loading={deleteLoading}
+          onConfirm={handleDelete}
+          onClose={() => { if (!deleteLoading) setDeleteTarget(null); }}
+        />
+      )}
     </div>
   );
 }

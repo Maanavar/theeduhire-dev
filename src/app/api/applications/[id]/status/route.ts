@@ -13,6 +13,7 @@ import {
 } from "@/lib/idempotency";
 import { publishDomainEvent } from "@/lib/domain-events";
 import { cacheTags } from "@/lib/cache-tags";
+import { notifyApplicationStatusChange } from "@/lib/notifications";
 
 export async function PATCH(
   req: NextRequest,
@@ -129,10 +130,22 @@ export async function PATCH(
           rejectionReason: parsed.data.rejectionReason ?? null,
           note: parsed.data.note ?? null,
         },
-        metadata: {
-          source: "api.applications.status",
-        },
+        metadata: { source: "api.applications.status" },
       });
+
+      // Notify the teacher about the status change
+      await notifyApplicationStatusChange(
+        {
+          teacherId: application.applicantId,
+          jobTitle: application.job.title,
+          schoolName: application.job.school.schoolName,
+          toStatus: parsed.data.status,
+          applicationId: application.id,
+          jobId: application.job.id,
+          rejectionReason: parsed.data.rejectionReason ?? null,
+        },
+        tx
+      );
 
       return nextApplication;
     });

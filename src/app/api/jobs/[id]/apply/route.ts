@@ -140,8 +140,9 @@ export async function POST(
           select: { id: true, question: true, required: true },
         },
         schoolId: true,
+        postedBy: true,
         school: { select: { schoolName: true } },
-        poster: { select: { email: true, name: true } },
+        poster: { select: { email: true, name: true, id: true } },
       },
     });
 
@@ -224,13 +225,6 @@ export async function POST(
           status: "PENDING",
           coverLetter: parsed.data.coverLetter || null,
           resumeId: parsed.data.resumeId || null,
-          statusHistory: {
-            create: {
-              fromStatus: "PENDING",
-              toStatus: "PENDING",
-              changedBy: auth.user.id,
-            },
-          },
         },
       });
 
@@ -261,6 +255,19 @@ export async function POST(
           source: "api.jobs.apply",
         },
       });
+
+      // Notify the school poster about the new application
+      if (job.postedBy) {
+        await tx.notification.create({
+          data: {
+            userId: job.postedBy,
+            type: "APPLICATION",
+            title: "New application received",
+            body: `A teacher applied for ${job.title}.`,
+            payload: { applicationId: createdApplication.id, jobId },
+          },
+        });
+      }
 
       return createdApplication;
     });

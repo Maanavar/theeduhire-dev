@@ -7,13 +7,19 @@ export type AdminAuditAction =
   | "school.approve" | "school.verify" | "school.unverify"
   | "school.reject" | "school.mark_pending"
   | "school.suspend" | "school.unsuspend"
+  | "school.create" | "school.edit" | "school.delete"
   // Teacher
   | "teacher.approve" | "teacher.reject" | "teacher.mark_pending"
   | "teacher.revoke_badge" | "teacher.suspend" | "teacher.unsuspend"
+  | "teacher.create" | "teacher.edit" | "teacher.delete"
   // Job
-  | "job.close" | "job.activate" | "job.hide" | "job.show" | "job.delete";
+  | "job.close" | "job.activate" | "job.hide" | "job.show" | "job.delete"
+  // Offline school
+  | "offline_school.create" | "offline_school.edit" | "offline_school.delete"
+  // Managed job
+  | "managed_job.create" | "managed_job.edit" | "managed_job.delete" | "managed_job.status_change";
 
-export type AdminAuditEntity = "school" | "teacher" | "job";
+export type AdminAuditEntity = "school" | "teacher" | "job" | "offline_school" | "managed_job";
 
 interface LogAdminActionParams {
   adminId: string;

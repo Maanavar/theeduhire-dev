@@ -5,7 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Calendar, Loader2, MapPin, Phone, Video } from "lucide-react";
 import { toast } from "sonner";
-import { EmptyState, ErrorState, LoadingState } from "@/components/system/system-states";
+import { EmptyState, ErrorState } from "@/components/system/system-states";
+import { InterviewSkeleton } from "@/components/system/dashboard-skeletons";
 import { PageHeader, PageShell, Panel, StatusBadge } from "@/components/layout/page-shell";
 import { getApiErrorMessage } from "@/lib/api/client";
 import {
@@ -186,7 +187,7 @@ export default function InterviewsPage() {
 
         const responses = await Promise.all(
           activeJobs.map(async (job) => {
-            const candidates = await getAllRankedCandidates(job.id);
+            const { candidates } = await getAllRankedCandidates(job.id);
             return candidates
               .filter((entry) => !["HIRED", "REJECTED"].includes(entry.status))
               .map((entry) => ({
@@ -323,7 +324,7 @@ export default function InterviewsPage() {
   };
 
   if (loading) {
-    return <LoadingState title="Loading interviews" message="Fetching your upcoming and past interview schedule." />;
+    return <InterviewSkeleton rows={4} />;
   }
 
   if (error) {

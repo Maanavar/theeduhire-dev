@@ -251,18 +251,18 @@ export function getRankedCandidates(
 export async function getAllRankedCandidates(
   jobId: string,
   options: { limit?: number; sort?: string } = {}
-) {
+): Promise<{ candidates: ApplicantBoardCandidate[]; contactHidden: boolean; aiAllowed: boolean }> {
   const allCandidates: ApplicantBoardCandidate[] = [];
   let page = 1;
   let totalPages = 1;
+  let contactHidden = false;
+  let aiAllowed = true;
 
   while (page <= totalPages) {
     const response = await apiRequestWithMeta<
       ApplicantBoardCandidate[],
       string,
-      RankedCandidatesPage["pagination"] extends infer TPagination
-        ? { pagination?: TPagination }
-        : {}
+      { pagination?: RankedCandidatesPage["pagination"]; meta?: { contactHidden: boolean; aiAllowed: boolean } }
     >(
       `/api/jobs/${jobId}/candidates/ranked?${new URLSearchParams({
         page: String(page),
@@ -275,10 +275,14 @@ export async function getAllRankedCandidates(
 
     allCandidates.push(...response.data);
     totalPages = response.pagination?.totalPages || 1;
+    if (response.meta) {
+      contactHidden = response.meta.contactHidden;
+      aiAllowed = response.meta.aiAllowed;
+    }
     page += 1;
   }
 
-  return allCandidates;
+  return { candidates: allCandidates, contactHidden, aiAllowed };
 }
 
 export function updateApplicationStatus(

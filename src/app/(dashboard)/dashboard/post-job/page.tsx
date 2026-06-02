@@ -1,10 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BOARDS, GRADE_LEVELS, JOB_TYPES, JOB_EXPERIENCE_LEVELS, SUBJECTS } from "@/config/constants";
+import {
+  BOARDS,
+  GRADE_LEVELS,
+  JOB_TYPES,
+  JOB_EXPERIENCE_LEVELS,
+  EXPERIENCE_LEVEL_TO_RANGE,
+  SUBJECTS,
+} from "@/config/constants";
 import { createJobSchema } from "@/lib/validators/job";
-import { Eye, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  ChevronRight,
+  Clock,
+  Eye,
+  IndianRupee,
+  Loader2,
+  Sparkles,
+  Trash2,
+  Plus,
+  Zap,
+} from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { getJob, createJob, updateJob, improveJobWithAi } from "@/lib/api/jobs-client";
@@ -32,16 +53,172 @@ type PostJobFormState = {
   screeningQuestions: ScreeningQuestionInput[];
 };
 
+// ── Pill selector ─────────────────────────────────────────────────────────────
+function PillGroup<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[];
+  value: T | T[];
+  onChange: (v: T) => void;
+}) {
+  const selected = Array.isArray(value) ? value : [value];
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((opt) => {
+        const active = selected.includes(opt.value);
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            className={[
+              "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-all",
+              active
+                ? "border-[var(--eh-primary-500)] bg-[var(--eh-primary-50)] text-[var(--eh-primary-700)] ring-1 ring-[var(--eh-primary-200)]"
+                : "border-[var(--eh-border)] bg-white text-[var(--eh-text-2)] hover:border-[var(--eh-primary-300)] hover:text-[var(--eh-primary-600)]",
+            ].join(" ")}
+          >
+            {active && <Check size={11} className="mr-1 inline" />}
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Step indicator ────────────────────────────────────────────────────────────
+function StepBar({
+  steps,
+  current,
+  onGo,
+}: {
+  steps: { label: string; done: boolean }[];
+  current: number;
+  onGo: (i: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-0">
+      {steps.map((step, i) => (
+        <div key={step.label} className="flex items-center">
+          <button
+            type="button"
+            onClick={() => onGo(i)}
+            className="flex items-center gap-2 px-1 py-0.5"
+          >
+            <span
+              className={[
+                "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-all",
+                i === current
+                  ? "bg-[var(--eh-primary-600)] text-white"
+                  : step.done
+                    ? "bg-emerald-500 text-white"
+                    : "border border-[var(--eh-border)] bg-white text-[var(--eh-text-3)]",
+              ].join(" ")}
+            >
+              {step.done && i !== current ? <Check size={11} /> : i + 1}
+            </span>
+            <span
+              className={[
+                "hidden text-[13px] font-semibold sm:block",
+                i === current
+                  ? "text-[var(--eh-text)]"
+                  : step.done
+                    ? "text-emerald-600"
+                    : "text-[var(--eh-text-3)]",
+              ].join(" ")}
+            >
+              {step.label}
+            </span>
+          </button>
+          {i < steps.length - 1 && (
+            <div className={["mx-2 h-px w-8 flex-shrink-0 rounded", step.done ? "bg-emerald-300" : "bg-[var(--eh-border)]"].join(" ")} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Live preview card ─────────────────────────────────────────────────────────
+function LivePreview({ form }: { form: PostJobFormState }) {
+  const typeLabel = JOB_TYPES.find((t) => t.value === form.jobType)?.label || form.jobType;
+  const boardLabel = BOARDS.find((b) => b.value === form.board)?.label || form.board;
+  const expLabel = JOB_EXPERIENCE_LEVELS.find((e) => e.value === form.experienceLevel)?.label || "";
+  const salary =
+    form.salaryMin && form.salaryMax
+      ? `₹${Number(form.salaryMin).toLocaleString("en-IN")} – ₹${Number(form.salaryMax).toLocaleString("en-IN")} / mo`
+      : form.salaryMin
+        ? `From ₹${Number(form.salaryMin).toLocaleString("en-IN")}/mo`
+        : "Salary not set";
+
+  return (
+    <div className="rounded-xl border border-[var(--eh-border)] bg-white p-5 shadow-sm">
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--eh-text-4)]">Live preview</p>
+      <h3 className="text-[17px] font-semibold leading-snug text-[var(--eh-text)]">
+        {form.title || <span className="text-[var(--eh-text-4)]">Job title</span>}
+      </h3>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-[var(--eh-text-3)]">
+        <span>{form.subject || "Subject"}</span>
+        <span>·</span>
+        <span>Grade {form.gradeLevel}</span>
+        <span>·</span>
+        <span>{boardLabel}</span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {form.jobType && (
+          <span className="rounded-full border border-[var(--eh-border)] bg-[var(--surface-base)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--eh-text-2)]">
+            {typeLabel}
+          </span>
+        )}
+        {expLabel && (
+          <span className="rounded-full border border-[var(--eh-border)] bg-[var(--surface-base)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--eh-text-2)]">
+            {expLabel}
+          </span>
+        )}
+        {form.requiresTet && (
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700">
+            TET required
+          </span>
+        )}
+        {form.isUrgent && (
+          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-[11px] font-medium text-red-600">
+            Urgent
+          </span>
+        )}
+      </div>
+      <div className="mt-3 flex items-center gap-1.5 text-[13px] font-semibold text-[var(--eh-text)]">
+        <IndianRupee size={13} className="text-[var(--eh-text-3)]" />
+        {salary}
+      </div>
+      {form.applicationDeadline && (
+        <div className="mt-1 flex items-center gap-1.5 text-[12px] text-[var(--eh-text-3)]">
+          <Clock size={11} />
+          Apply by {new Date(form.applicationDeadline).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+        </div>
+      )}
+      {form.description && (
+        <p className="mt-3 line-clamp-3 text-[12px] leading-relaxed text-[var(--eh-text-2)]">{form.description}</p>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function PostJobPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editingJobId = searchParams.get("jobId");
 
+  const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [improvingWithAi, setImprovingWithAi] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [draftJobId, setDraftJobId] = useState<string | null>(editingJobId);
+  const topRef = useRef<HTMLDivElement>(null);
 
   const [form, setForm] = useState<PostJobFormState>({
     title: "",
@@ -49,7 +226,7 @@ export default function PostJobPage() {
     board: "CBSE",
     gradeLevel: "11-12",
     jobType: "FULL_TIME",
-    experience: "3-5 years",
+    experience: "3-6 years",
     experienceLevel: "TWO_TO_FIVE_YEARS",
     salaryMin: "",
     salaryMax: "",
@@ -80,80 +257,60 @@ export default function PostJobPage() {
           isUrgent: !!job.isUrgent,
           requiredWithin48h: !!job.requiredWithin48h,
           requiresTet: !!job.requiresTet,
-          applicationDeadline: job.applicationDeadline ? new Date(job.applicationDeadline).toISOString().split("T")[0] : "",
+          applicationDeadline: job.applicationDeadline
+            ? new Date(job.applicationDeadline).toISOString().split("T")[0]
+            : "",
           description: job.description || "",
           requirements: (job.requirements || []).map((item: { text: string }) => item.text).join("\n"),
           benefits: (job.benefits || []).map((item: { text: string }) => item.text).join("\n"),
           screeningQuestions:
             (job.screeningQuestions || []).length > 0
-              ? job.screeningQuestions.map((item: { question: string; required: boolean }) => ({ question: item.question, required: !!item.required }))
+              ? job.screeningQuestions.map((item: { question: string; required: boolean }) => ({
+                  question: item.question,
+                  required: !!item.required,
+                }))
               : [{ question: "", required: false }],
         });
       })
       .catch(() => {});
   }, [editingJobId]);
 
-  const setField = <K extends Exclude<keyof PostJobFormState, "screeningQuestions">>(key: K, value: PostJobFormState[K]) => {
+  const setField = <K extends Exclude<keyof PostJobFormState, "screeningQuestions">>(
+    key: K,
+    value: PostJobFormState[K]
+  ) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     if (fieldErrors[key]) setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
   };
 
-  const checklist = useMemo(
-    () => [
-      { label: "Title & basics", done: !!form.title && !!form.subject && !!form.gradeLevel },
-      { label: "Description", done: form.description.trim().length >= 50 },
-      { label: "Responsibilities", done: form.requirements.trim().length > 0 },
-      { label: "Benefits", done: form.benefits.trim().length > 0 },
-      {
-        label: "Compensation",
-        done:
-          ((!form.salaryMin && !form.salaryMax) || (!!form.salaryMin && !!form.salaryMax)) &&
-          (!form.salaryMin || !form.salaryMax || Number(form.salaryMin) <= Number(form.salaryMax)),
-      },
-    ],
-    [form]
-  );
-  const sections = useMemo(
+  const steps = useMemo(
     () => [
       {
-        id: "basics",
-        step: "01",
-        label: "Basics",
-        description: "Role, board, class level, and hiring context.",
+        label: "Role",
         done: !!form.title && !!form.subject && !!form.gradeLevel && !!form.board && !!form.jobType,
       },
       {
-        id: "description",
-        step: "02",
         label: "Description",
-        description: "What the teacher will own and why the role stands out.",
-        done: form.description.trim().length >= 50 && form.requirements.trim().length > 0 && form.benefits.trim().length > 0,
+        done: form.description.trim().length >= 50,
       },
       {
-        id: "compensation",
-        step: "03",
         label: "Compensation",
-        description: "Salary guidance and application timing.",
         done:
-          ((!form.salaryMin && !form.salaryMax) || (!!form.salaryMin && !!form.salaryMax)) &&
-          (!form.salaryMin || !form.salaryMax || Number(form.salaryMin) <= Number(form.salaryMax)) &&
+          !!(form.salaryMin && form.salaryMax) &&
+          Number(form.salaryMin) <= Number(form.salaryMax) &&
           !!form.applicationDeadline,
       },
       {
-        id: "screening",
-        step: "04",
         label: "Screening",
-        description: "Optional questions to improve applicant quality.",
-        done: form.screeningQuestions.some((item) => item.question.trim().length > 0),
+        done: form.screeningQuestions.some((q) => q.question.trim().length > 0),
       },
     ],
     [form]
   );
-  const completed = checklist.filter((entry) => entry.done).length;
-  const completedSections = sections.filter((entry) => entry.done).length;
+
   const salaryRangeError =
     form.salaryMin && form.salaryMax && Number(form.salaryMin) > Number(form.salaryMax)
-      ? "Maximum salary must be greater than or equal to minimum salary."
+      ? "Max must be ≥ min"
       : "";
 
   const buildValidatedPayload = () => {
@@ -161,10 +318,9 @@ export default function PostJobPage() {
     setFieldErrors({});
     if (salaryRangeError) {
       setFieldErrors({ salaryMax: salaryRangeError });
-      setError("Please fix the highlighted fields before continuing.");
+      setError("Fix highlighted fields before continuing.");
       return null;
     }
-
     const payload = {
       title: form.title,
       subject: form.subject,
@@ -180,23 +336,12 @@ export default function PostJobPage() {
       requiresTet: form.requiresTet,
       applicationDeadline: form.applicationDeadline || undefined,
       description: form.description,
-      requirements: form.requirements
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean),
-      benefits: form.benefits
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean),
+      requirements: form.requirements.split("\n").map((l) => l.trim()).filter(Boolean),
+      benefits: form.benefits.split("\n").map((l) => l.trim()).filter(Boolean),
       screeningQuestions: form.screeningQuestions
-        .map((item, index) => ({
-          question: item.question.trim(),
-          required: item.required,
-          sortOrder: index,
-        }))
+        .map((item, index) => ({ question: item.question.trim(), required: item.required, sortOrder: index }))
         .filter((item) => item.question.length > 0),
     };
-
     const parsed = createJobSchema.safeParse(payload);
     if (!parsed.success) {
       const errors: FieldErrors = {};
@@ -205,23 +350,20 @@ export default function PostJobPage() {
         if (!errors[field]) errors[field] = issue.message;
       }
       setFieldErrors(errors);
-      setError("Please fix the highlighted fields before continuing.");
+      setError("Fix highlighted fields before continuing.");
       return null;
     }
-
     return parsed.data;
   };
 
   const upsertJob = async (status: "DRAFT" | "ACTIVE") => {
     const parsed = buildValidatedPayload();
     if (!parsed) return null;
-
     if (draftJobId) {
       await updateJob(draftJobId, parsed);
       await updateJobStatus(draftJobId, status);
       return draftJobId;
     }
-
     const created = await createJob({ ...parsed, status });
     setDraftJobId(created.id);
     return created.id;
@@ -234,9 +376,9 @@ export default function PostJobPage() {
       if (!id) return;
       toast.success("Draft saved");
     } catch (err) {
-      const message = getApiErrorMessage(err, "Failed to save draft");
-      setError(message);
-      toast.error(message);
+      const msg = getApiErrorMessage(err, "Failed to save draft");
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -247,13 +389,13 @@ export default function PostJobPage() {
     try {
       const id = await upsertJob("ACTIVE");
       if (!id) return;
-      toast.success("Job published");
+      toast.success("Job published!");
       router.push(`/dashboard/my-jobs?published=${id}`);
       router.refresh();
     } catch (err) {
-      const message = getApiErrorMessage(err, "Failed to publish job");
-      setError(message);
-      toast.error(message);
+      const msg = getApiErrorMessage(err, "Failed to publish job");
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -266,9 +408,7 @@ export default function PostJobPage() {
       if (!id) return;
       window.open(`/jobs/${id}?preview=1`, "_blank");
     } catch (err) {
-      const message = getApiErrorMessage(err, "Failed to open preview");
-      setError(message);
-      toast.error(message);
+      toast.error(getApiErrorMessage(err, "Failed to open preview"));
     } finally {
       setLoading(false);
     }
@@ -289,7 +429,7 @@ export default function PostJobPage() {
         ...(improved.requirements ? { requirements: improved.requirements } : {}),
         ...(improved.benefits ? { benefits: improved.benefits } : {}),
       }));
-      toast.success("AI suggestions applied.");
+      toast.success("AI suggestions applied");
     } catch (err) {
       toast.error(getApiErrorMessage(err, "AI improvement failed"));
     } finally {
@@ -297,363 +437,502 @@ export default function PostJobPage() {
     }
   };
 
+  const goTo = (i: number) => {
+    setStep(i);
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const next = () => goTo(Math.min(step + 1, steps.length - 1));
+  const back = () => goTo(Math.max(step - 1, 0));
+
   const inputClass = (name: keyof typeof form) =>
     `input-base ${fieldErrors[name] ? "border-red-300 ring-1 ring-red-200" : ""}`;
-  const scrollToSection = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
-  return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+  // ── Step 0: Role ────────────────────────────────────────────────────────────
+  const renderRole = () => (
+    <div className="space-y-6">
+      {/* Title */}
+      <div>
+        <label className="mb-1.5 block text-[13px] font-semibold text-[var(--eh-text)]">
+          Job title <span className="text-red-500">*</span>
+        </label>
+        <input
+          value={form.title}
+          onChange={(e) => setField("title", e.target.value)}
+          className={`${inputClass("title")} text-[15px]`}
+          placeholder="e.g. Senior Mathematics Teacher"
+        />
+        {fieldErrors.title && <p className="mt-1 text-[12px] text-red-600">{fieldErrors.title}</p>}
+      </div>
+
+      {/* Subject */}
+      <div>
+        <label className="mb-2 block text-[13px] font-semibold text-[var(--eh-text)]">
+          Subject <span className="text-red-500">*</span>
+        </label>
+        <PillGroup
+          options={SUBJECTS.map((s) => ({ value: s, label: s }))}
+          value={form.subject as typeof SUBJECTS[number]}
+          onChange={(v) => setField("subject", v)}
+        />
+      </div>
+
+      {/* Board */}
+      <div>
+        <label className="mb-2 block text-[13px] font-semibold text-[var(--eh-text)]">
+          Board <span className="text-red-500">*</span>
+        </label>
+        <PillGroup
+          options={BOARDS.map((b) => ({ value: b.value, label: b.label }))}
+          value={form.board as typeof BOARDS[number]["value"]}
+          onChange={(v) => setField("board", v)}
+        />
+      </div>
+
+      {/* Grade */}
+      <div>
+        <label className="mb-2 block text-[13px] font-semibold text-[var(--eh-text)]">
+          Grade / class level <span className="text-red-500">*</span>
+        </label>
+        <PillGroup
+          options={GRADE_LEVELS.map((g) => ({ value: g, label: `Grade ${g}` }))}
+          value={form.gradeLevel as typeof GRADE_LEVELS[number]}
+          onChange={(v) => setField("gradeLevel", v)}
+        />
+      </div>
+
+      {/* Job type */}
+      <div>
+        <label className="mb-2 block text-[13px] font-semibold text-[var(--eh-text)]">
+          Employment type <span className="text-red-500">*</span>
+        </label>
+        <PillGroup
+          options={JOB_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+          value={form.jobType as typeof JOB_TYPES[number]["value"]}
+          onChange={(v) => setField("jobType", v)}
+        />
+      </div>
+
+      {/* Experience */}
+      <div>
+        <label className="mb-2 block text-[13px] font-semibold text-[var(--eh-text)]">
+          Experience required
+        </label>
+        <PillGroup
+          options={JOB_EXPERIENCE_LEVELS.map((e) => ({ value: e.value, label: e.label }))}
+          value={form.experienceLevel as typeof JOB_EXPERIENCE_LEVELS[number]["value"]}
+          onChange={(v) => {
+            setField("experienceLevel", v);
+            setField("experience", EXPERIENCE_LEVEL_TO_RANGE[v] ?? "");
+          }}
+        />
+      </div>
+
+      {/* Flags */}
+      <div>
+        <label className="mb-2 block text-[13px] font-semibold text-[var(--eh-text)]">Role flags</label>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setField("isUrgent", !form.isUrgent);
+              setField("requiredWithin48h", !form.isUrgent);
+            }}
+            className={[
+              "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-all",
+              form.isUrgent
+                ? "border-red-300 bg-red-50 text-red-700 ring-1 ring-red-200"
+                : "border-[var(--eh-border)] bg-white text-[var(--eh-text-2)] hover:border-red-300 hover:text-red-600",
+            ].join(" ")}
+          >
+            {form.isUrgent && <Zap size={11} className="mr-1 inline fill-red-500 text-red-500" />}
+            Urgent (48h)
+          </button>
+          <button
+            type="button"
+            onClick={() => setField("requiresTet", !form.requiresTet)}
+            className={[
+              "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-all",
+              form.requiresTet
+                ? "border-amber-300 bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                : "border-[var(--eh-border)] bg-white text-[var(--eh-text-2)] hover:border-amber-300 hover:text-amber-600",
+            ].join(" ")}
+          >
+            {form.requiresTet && <Check size={11} className="mr-1 inline" />}
+            TET/CTET required
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Step 1: Description ─────────────────────────────────────────────────────
+  const renderDescription = () => (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
         <div>
-          <p className="text-[13px] text-[var(--eh-text-3)]">Jobs · {draftJobId ? "Edit draft" : "New posting"}</p>
-          <h1 className="text-[26px] font-semibold tracking-[-0.02em] text-[var(--eh-text)]">{form.title || "New Job"}</h1>
-          <p className="mt-1 text-[14px] text-[var(--eh-text-3)]">
-            Build the post in four steps, then preview and publish when the brief feels complete.
+          <p className="text-[13px] font-semibold text-[var(--eh-text)]">Job description</p>
+          <p className="text-[12px] text-[var(--eh-text-3)]">Explain the role, expectations, and what makes your school stand out.</p>
+        </div>
+        <button
+          onClick={improveWithAi}
+          disabled={improvingWithAi}
+          type="button"
+          className="eh-btn eh-btn-secondary eh-btn-sm border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] text-[var(--eh-primary-700)]"
+        >
+          {improvingWithAi ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+          Improve with AI
+        </button>
+      </div>
+
+      <div>
+        <label className="mb-1.5 block text-[13px] font-semibold text-[var(--eh-text)]">
+          Overview <span className="text-red-500">*</span>
+          <span className="ml-2 font-normal text-[var(--eh-text-3)]">(min 50 chars)</span>
+        </label>
+        <textarea
+          value={form.description}
+          onChange={(e) => setField("description", e.target.value)}
+          className={`${inputClass("description")} min-h-[140px] resize-y`}
+          placeholder="Describe the role, the department, and what this teacher will own day-to-day..."
+        />
+        <div className="mt-1 flex items-center justify-between">
+          {fieldErrors.description && <p className="text-[12px] text-red-600">{fieldErrors.description}</p>}
+          <p className={["ml-auto text-[11px]", form.description.length < 50 ? "text-[var(--eh-text-4)]" : "text-emerald-600"].join(" ")}>
+            {form.description.length} / 50 min
           </p>
         </div>
-        <div className="flex gap-2">
+      </div>
+
+      <div>
+        <label className="mb-1 block text-[13px] font-semibold text-[var(--eh-text)]">
+          Key responsibilities
+          <span className="ml-2 font-normal text-[12px] text-[var(--eh-text-3)]">— one per line</span>
+        </label>
+        <textarea
+          value={form.requirements}
+          onChange={(e) => setField("requirements", e.target.value)}
+          className={`${inputClass("requirements")} min-h-[110px] resize-y font-mono text-[13px]`}
+          placeholder={"Plan and deliver lessons aligned to curriculum\nMaintain student progress records\nConduct parent-teacher meetings"}
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-[13px] font-semibold text-[var(--eh-text)]">
+          Benefits &amp; perks
+          <span className="ml-2 font-normal text-[12px] text-[var(--eh-text-3)]">— one per line</span>
+        </label>
+        <textarea
+          value={form.benefits}
+          onChange={(e) => setField("benefits", e.target.value)}
+          className={`${inputClass("benefits")} min-h-[100px] resize-y font-mono text-[13px]`}
+          placeholder={"Competitive salary + performance bonus\nPF, ESI, and health insurance\nProfessional development budget"}
+        />
+      </div>
+    </div>
+  );
+
+  // ── Step 2: Compensation ────────────────────────────────────────────────────
+  const renderCompensation = () => (
+    <div className="space-y-5">
+      <div>
+        <label className="mb-1 block text-[13px] font-semibold text-[var(--eh-text)]">
+          Monthly salary range (₹)
+        </label>
+        <p className="mb-3 text-[12px] text-[var(--eh-text-3)]">
+          Jobs with declared salary get 2.4× more qualified applicants.
+        </p>
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-[var(--eh-text-3)]">₹</span>
+            <input
+              type="number"
+              value={form.salaryMin}
+              onChange={(e) => setField("salaryMin", e.target.value)}
+              className={`${inputClass("salaryMin")} pl-7`}
+              placeholder="Minimum"
+            />
+          </div>
+          <span className="text-[var(--eh-text-3)]">–</span>
+          <div className="relative flex-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-[var(--eh-text-3)]">₹</span>
+            <input
+              type="number"
+              value={form.salaryMax}
+              onChange={(e) => setField("salaryMax", e.target.value)}
+              className={`${inputClass("salaryMax")} pl-7`}
+              placeholder="Maximum"
+            />
+          </div>
+        </div>
+        {(salaryRangeError || fieldErrors.salaryMax) && (
+          <p className="mt-1 text-[12px] text-red-600">{salaryRangeError || fieldErrors.salaryMax}</p>
+        )}
+        {form.salaryMin && form.salaryMax && !salaryRangeError && (
+          <p className="mt-1.5 text-[12px] text-emerald-600">
+            ₹{Number(form.salaryMin).toLocaleString("en-IN")} – ₹{Number(form.salaryMax).toLocaleString("en-IN")} / month
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label className="mb-1 block text-[13px] font-semibold text-[var(--eh-text)]">
+          Application deadline <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="date"
+          value={form.applicationDeadline}
+          onChange={(e) => setField("applicationDeadline", e.target.value)}
+          className={`${inputClass("applicationDeadline")} max-w-[220px]`}
+          min={new Date().toISOString().split("T")[0]}
+        />
+        <p className="mt-1 text-[12px] text-[var(--eh-text-3)]">
+          Set a close date so teachers know the window. This also builds urgency.
+        </p>
+        {fieldErrors.applicationDeadline && (
+          <p className="mt-1 text-[12px] text-red-600">{fieldErrors.applicationDeadline}</p>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── Step 3: Screening ───────────────────────────────────────────────────────
+  const renderScreening = () => (
+    <div className="space-y-4">
+      <div>
+        <p className="text-[13px] font-semibold text-[var(--eh-text)]">Screening questions</p>
+        <p className="text-[12px] text-[var(--eh-text-3)]">Optional — ask only what helps you shortlist faster. Teachers answer before submitting.</p>
+      </div>
+
+      {form.screeningQuestions.map((item, index) => (
+        <div key={`q-${index}`} className="rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[12px] font-semibold text-[var(--eh-text-3)]">Question {index + 1}</p>
+            <button
+              type="button"
+              onClick={() =>
+                setForm((prev) => ({
+                  ...prev,
+                  screeningQuestions:
+                    prev.screeningQuestions.length > 1
+                      ? prev.screeningQuestions.filter((_, i) => i !== index)
+                      : [{ question: "", required: false }],
+                }))
+              }
+              className="rounded-lg p-1 text-[var(--eh-text-3)] hover:bg-white hover:text-red-500"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+          <textarea
+            value={item.question}
+            onChange={(e) =>
+              setForm((prev) => ({
+                ...prev,
+                screeningQuestions: prev.screeningQuestions.map((q, i) =>
+                  i === index ? { ...q, question: e.target.value } : q
+                ),
+              }))
+            }
+            className="input-base min-h-[72px]"
+            placeholder="e.g. Do you hold B.Ed and 3+ years CBSE experience?"
+          />
+          <label className="mt-2 inline-flex items-center gap-2 text-[12px] text-[var(--eh-text-2)]">
+            <input
+              type="checkbox"
+              checked={item.required}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  screeningQuestions: prev.screeningQuestions.map((q, i) =>
+                    i === index ? { ...q, required: e.target.checked } : q
+                  ),
+                }))
+              }
+            />
+            Required to apply
+          </label>
+        </div>
+      ))}
+
+      <button
+        type="button"
+        className="eh-btn eh-btn-secondary w-full"
+        onClick={() =>
+          setForm((prev) => ({
+            ...prev,
+            screeningQuestions: [...prev.screeningQuestions, { question: "", required: false }],
+          }))
+        }
+      >
+        <Plus size={13} /> Add question
+      </button>
+    </div>
+  );
+
+  const stepContent = [renderRole, renderDescription, renderCompensation, renderScreening];
+  const allDone = steps.every((s) => s.done);
+
+  return (
+    <div ref={topRef}>
+      {/* ── Header ── */}
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="mb-2 inline-flex items-center gap-1 text-[12px] text-[var(--eh-text-3)] hover:text-[var(--eh-text-2)]"
+          >
+            <ArrowLeft size={13} /> Back to jobs
+          </button>
+          <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-[var(--eh-text)]">
+            {draftJobId ? "Edit job posting" : "Create a job posting"}
+          </h1>
+          <p className="mt-0.5 text-[13px] text-[var(--eh-text-3)]">
+            {form.title ? `"${form.title}"` : "Complete each section, then publish."}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <button onClick={saveDraft} disabled={loading} className="eh-btn eh-btn-ghost">
-            {loading ? <Loader2 size={14} className="animate-spin" /> : null}
+            {loading ? <Loader2 size={13} className="animate-spin" /> : null}
             Save draft
           </button>
           <button onClick={preview} disabled={loading} className="eh-btn eh-btn-secondary">
-            <Eye size={14} /> Preview
-          </button>
-          <button onClick={publish} disabled={loading} className="eh-btn eh-btn-primary">
-            {loading ? <Loader2 size={14} className="animate-spin" /> : null}
-            Publish job
+            <Eye size={13} /> Preview
           </button>
         </div>
       </div>
 
-      {error ? <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[14px] text-red-700">{error}</div> : null}
+      {error && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+          <AlertCircle size={15} />
+          {error}
+        </div>
+      )}
 
+      {/* ── Main grid ── */}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-4">
-          <section id="basics" className="scroll-mt-24 rounded-xl border border-[var(--eh-border)] bg-white p-5">
-            <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-[var(--eh-border)] pb-4">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-eh-primary">Step 1 · Basics</p>
-                <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.01em] text-[var(--eh-text)]">Anchor the role clearly</h2>
-                <p className="mt-1 text-[13px] text-[var(--eh-text-3)]">Set the fundamentals first so every later detail has the right context.</p>
-              </div>
-              <span className="rounded-full border border-[var(--eh-border)] bg-[var(--surface-base)] px-2.5 py-1 text-[11px] font-semibold text-[var(--eh-text-3)]">
-                {sections[0]?.done ? "Ready" : "In progress"}
-              </span>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <label className="eh-label">Job title</label>
-                <input value={form.title} onChange={(e) => setField("title", e.target.value)} className={inputClass("title")} />
-              </div>
+        {/* Left: step form */}
+        <div>
+          {/* Step bar */}
+          <div className="mb-5 rounded-xl border border-[var(--eh-border)] bg-white px-5 py-4">
+            <StepBar steps={steps} current={step} onGo={goTo} />
+          </div>
 
-              <div>
-                <label className="eh-label">Subject</label>
-                <select value={form.subject} onChange={(e) => setField("subject", e.target.value)} className={inputClass("subject")}>
-                  {SUBJECTS.map((subject) => (
-                    <option key={subject} value={subject}>
-                      {subject}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="eh-label">Grade / class level</label>
-                <select value={form.gradeLevel} onChange={(e) => setField("gradeLevel", e.target.value)} className={inputClass("gradeLevel")}>
-                  {GRADE_LEVELS.map((grade) => (
-                    <option key={grade} value={grade}>
-                      {grade}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="eh-label">Board</label>
-                <select value={form.board} onChange={(e) => setField("board", e.target.value)} className={inputClass("board")}>
-                  {BOARDS.map((board) => (
-                    <option key={board.value} value={board.value}>
-                      {board.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="eh-label">Job type</label>
-                <select value={form.jobType} onChange={(e) => setField("jobType", e.target.value)} className={inputClass("jobType")}>
-                  {JOB_TYPES.map((jobType) => (
-                    <option key={jobType.value} value={jobType.value}>
-                      {jobType.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="md:col-span-2 space-y-2 rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] px-4 py-3">
-                <label className="flex items-center gap-3 text-[13px] font-medium text-[var(--eh-text)]">
-                  <input
-                    type="checkbox"
-                    checked={form.isUrgent}
-                    onChange={(e) => {
-                      setField("isUrgent", e.target.checked);
-                      setField("requiredWithin48h", e.target.checked);
-                    }}
-                    className="rounded"
-                  />
-                  Urgent vacancy - needed within 48 hours
-                </label>
-                <label className="flex items-center gap-3 text-[13px] font-medium text-[var(--eh-text)]">
-                  <input
-                    type="checkbox"
-                    checked={form.requiresTet}
-                    onChange={(e) => setField("requiresTet", e.target.checked)}
-                    className="rounded"
-                  />
-                  TET/CTET required
-                </label>
-              </div>
-
-              <div>
-                <label className="eh-label">Experience level</label>
-                <select value={form.experienceLevel} onChange={(e) => setField("experienceLevel", e.target.value)} className={inputClass("experienceLevel")}>
-                  {JOB_EXPERIENCE_LEVELS.map((level) => (
-                    <option key={level.value} value={level.value}>
-                      {level.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="eh-label">Legacy experience note (optional)</label>
-                <input value={form.experience} onChange={(e) => setField("experience", e.target.value)} className={inputClass("experience")} />
-              </div>
-            </div>
-          </section>
-
-          <section id="description" className="scroll-mt-24 rounded-xl border border-[var(--eh-border)] bg-white p-5">
-            <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-[var(--eh-border)] pb-4">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-eh-primary">Step 2 · Description</p>
-                <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.01em] text-[var(--eh-text)]">Explain the job in plain language</h2>
-                <p className="mt-1 text-[13px] text-[var(--eh-text-3)]">Schools that describe expectations, support, and outcomes attract stronger applicants.</p>
-              </div>
-              <button
-                onClick={improveWithAi}
-                disabled={improvingWithAi}
-                type="button"
-                className="eh-btn eh-btn-secondary eh-btn-sm border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] text-eh-primary"
-              >
-                {improvingWithAi ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                Improve with AI
-              </button>
-            </div>
-            <label className="eh-label">Description</label>
-            <textarea value={form.description} onChange={(e) => setField("description", e.target.value)} className={`${inputClass("description")} min-h-[150px]`} />
-            <label className="eh-label mt-3">Responsibilities</label>
-            <textarea value={form.requirements} onChange={(e) => setField("requirements", e.target.value)} className={`${inputClass("requirements")} min-h-[120px]`} />
-            <label className="eh-label mt-3">Benefits</label>
-            <textarea value={form.benefits} onChange={(e) => setField("benefits", e.target.value)} className={`${inputClass("benefits")} min-h-[110px]`} />
-          </section>
-
-          <section id="compensation" className="scroll-mt-24 rounded-xl border border-[var(--eh-border)] bg-white p-5">
+          {/* Step content card */}
+          <div className="rounded-xl border border-[var(--eh-border)] bg-white p-6">
             <div className="mb-5 border-b border-[var(--eh-border)] pb-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-eh-primary">Step 3 · Compensation</p>
-              <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.01em] text-[var(--eh-text)]">Set timing and salary expectations</h2>
-              <p className="mt-1 text-[13px] text-[var(--eh-text-3)]">Clear ranges and deadlines help candidates self-select and apply faster.</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--eh-primary-600)]">
+                Step {step + 1} of {steps.length}
+              </p>
+              <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.01em] text-[var(--eh-text)]">
+                {["Define the role", "Describe the job", "Set compensation", "Add screening questions"][step]}
+              </h2>
+              <p className="mt-1 text-[13px] text-[var(--eh-text-3)]">
+                {[
+                  "Title, subject, board, grade, and type — the essentials teachers filter by.",
+                  "A clear description attracts better-fit applicants and reduces noise.",
+                  "Salary transparency is your highest-converting signal for quality applications.",
+                  "Filter early with targeted questions. Skip this step if you prefer open applications.",
+                ][step]}
+              </p>
             </div>
-            <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
-              <div className="grid gap-2 md:grid-cols-2">
-                <div>
-                  <label className="eh-label">Min salary (Rs/month)</label>
-                  <input type="number" value={form.salaryMin} onChange={(e) => setField("salaryMin", e.target.value)} className={inputClass("salaryMin")} />
-                </div>
-                <div>
-                  <label className="eh-label">Max salary (Rs/month)</label>
-                  <input type="number" value={form.salaryMax} onChange={(e) => setField("salaryMax", e.target.value)} className={inputClass("salaryMax")} />
-                </div>
-                {salaryRangeError || fieldErrors.salaryMax ? (
-                  <p className="text-[12px] text-red-600 md:col-span-2">{salaryRangeError || fieldErrors.salaryMax}</p>
-                ) : null}
-              </div>
-              <div>
-                <label className="eh-label">Application deadline</label>
-                <input
-                  type="date"
-                  value={form.applicationDeadline}
-                  onChange={(e) => setField("applicationDeadline", e.target.value)}
-                  className={inputClass("applicationDeadline")}
-                />
-                <p className="mt-1 text-[12px] text-[var(--eh-text-3)]">Set a close date so applicants know the response window.</p>
-                {fieldErrors.applicationDeadline ? (
-                  <p className="mt-1 text-[12px] text-red-600">{fieldErrors.applicationDeadline}</p>
-                ) : null}
-              </div>
-            </div>
-          </section>
 
-          <section id="screening" className="scroll-mt-24 rounded-xl border border-[var(--eh-border)] bg-white p-5">
-            <div className="mb-5 flex items-center justify-between border-b border-[var(--eh-border)] pb-4">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-eh-primary">Step 4 · Screening</p>
-                <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.01em] text-[var(--eh-text)]">Filter for fit before interviews</h2>
-                <p className="mt-1 text-[13px] text-[var(--eh-text-3)]">Ask only the questions that help your team review faster.</p>
-              </div>
+            {stepContent[step]()}
+
+            {/* Navigation */}
+            <div className="mt-6 flex items-center justify-between border-t border-[var(--eh-border)] pt-4">
               <button
                 type="button"
-                className="eh-btn eh-btn-secondary eh-btn-sm"
-                onClick={() =>
-                  setForm((prev) => ({
-                    ...prev,
-                    screeningQuestions: [...prev.screeningQuestions, { question: "", required: false }],
-                  }))
-                }
+                onClick={back}
+                disabled={step === 0}
+                className="eh-btn eh-btn-ghost disabled:opacity-40"
               >
-                <Plus size={13} /> Add question
+                <ArrowLeft size={14} /> Back
               </button>
+
+              <div className="flex gap-2">
+                {step < steps.length - 1 ? (
+                  <button type="button" onClick={next} className="eh-btn eh-btn-primary">
+                    Next <ArrowRight size={14} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={publish}
+                    disabled={loading}
+                    className="eh-btn eh-btn-primary"
+                  >
+                    {loading ? <Loader2 size={14} className="animate-spin" /> : null}
+                    {allDone ? "Publish job" : "Publish anyway"}
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="space-y-2.5">
-              {form.screeningQuestions.map((item, index) => (
-                <div key={`q-${index}`} className="rounded-xl border border-[var(--eh-border)] p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[12px] font-medium text-[var(--eh-text-3)]">Question {index + 1}</p>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          screeningQuestions:
-                            prev.screeningQuestions.length > 1
-                              ? prev.screeningQuestions.filter((_, i) => i !== index)
-                              : [{ question: "", required: false }],
-                        }))
-                      }
-                      className="rounded-lg border border-[var(--eh-border)] p-1.5 text-[var(--eh-text-3)] hover:bg-[var(--surface-base)]"
-                      aria-label={`Remove question ${index + 1}`}
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                  <textarea
-                    value={item.question}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        screeningQuestions: prev.screeningQuestions.map((q, i) =>
-                          i === index ? { ...q, question: e.target.value } : q
-                        ),
-                      }))
-                    }
-                    className="input-base mt-2 min-h-[82px]"
-                    placeholder="e.g. Do you have B.Ed and CBSE teaching experience?"
-                  />
-                  <label className="mt-2 inline-flex items-center gap-2 text-[12px] text-[var(--eh-text-2)]">
-                    <input
-                      type="checkbox"
-                      checked={item.required}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          screeningQuestions: prev.screeningQuestions.map((q, i) =>
-                            i === index ? { ...q, required: e.target.checked } : q
-                          ),
-                        }))
-                      }
-                    />
-                    Required
-                  </label>
-                </div>
-              ))}
-            </div>
-            {fieldErrors.screeningQuestions ? <p className="mt-2 text-[12px] text-red-600">{fieldErrors.screeningQuestions}</p> : null}
-          </section>
+          </div>
         </div>
 
-        <aside className="sticky top-24 space-y-4 self-start">
-          <section className="rounded-xl border border-[var(--eh-border)] bg-white p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-3)]">Publishing plan</p>
-                <h3 className="mt-1 text-[14px] font-semibold text-[var(--eh-text)]">Move through the post in order</h3>
-              </div>
-              <span className="rounded-full bg-[var(--eh-primary-50)] px-2 py-1 text-[11px] font-semibold text-eh-primary">
-                {completedSections}/{sections.length}
+        {/* Right: live preview + tips */}
+        <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+          <LivePreview form={form} />
+
+          {/* Completion progress */}
+          <div className="rounded-xl border border-[var(--eh-border)] bg-white p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-[13px] font-semibold text-[var(--eh-text)]">Completeness</p>
+              <span className="text-[12px] font-semibold text-[var(--eh-primary-600)]">
+                {steps.filter((s) => s.done).length}/{steps.length}
               </span>
             </div>
-            <div className="mt-3 space-y-2">
-              {sections.map((section) => (
+            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--eh-primary-100)]">
+              <div
+                className="h-full rounded-full bg-[var(--eh-primary-600)] transition-all duration-500"
+                style={{ width: `${(steps.filter((s) => s.done).length / steps.length) * 100}%` }}
+              />
+            </div>
+            <div className="mt-3 space-y-1.5">
+              {steps.map((s, i) => (
                 <button
-                  key={section.id}
+                  key={s.label}
                   type="button"
-                  onClick={() => scrollToSection(section.id)}
-                  className="flex w-full items-start gap-3 rounded-xl border border-[var(--eh-border)] px-3 py-3 text-left transition-colors hover:bg-[var(--surface-base)]"
+                  onClick={() => goTo(i)}
+                  className="flex w-full items-center gap-2 text-left"
                 >
-                  <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${section.done ? "bg-[var(--eh-success)] text-white" : "bg-[var(--surface-base)] text-[var(--eh-text-3)]"}`}>
-                    {section.done ? "✓" : section.step}
+                  <span
+                    className={[
+                      "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px]",
+                      s.done
+                        ? "bg-emerald-500 text-white"
+                        : i === step
+                          ? "border-2 border-[var(--eh-primary-500)] bg-white"
+                          : "border border-[var(--eh-border)] bg-white",
+                    ].join(" ")}
+                  >
+                    {s.done ? <Check size={9} /> : null}
                   </span>
-                  <span className="min-w-0">
-                    <span className="block text-[13px] font-semibold text-[var(--eh-text)]">{section.label}</span>
-                    <span className="mt-0.5 block text-[12px] leading-relaxed text-[var(--eh-text-3)]">{section.description}</span>
+                  <span className={["text-[12px]", s.done ? "text-[var(--eh-text-3)] line-through" : "text-[var(--eh-text-2)]"].join(" ")}>
+                    {s.label}
                   </span>
+                  {i === step && <ChevronRight size={11} className="ml-auto text-[var(--eh-primary-500)]" />}
                 </button>
               ))}
             </div>
-          </section>
+          </div>
 
-          <section className="rounded-xl border border-[var(--eh-border)] bg-white p-4">
-            <h3 className="mb-2 text-[14px] font-semibold text-[var(--eh-text)]">Posting checklist</h3>
-            <div className="space-y-2">
-              {checklist.map((entry) => (
-                <div key={entry.label} className="flex items-center gap-2 text-[13px]">
-                  <span className={["inline-flex h-4 w-4 items-center justify-center rounded-full border", entry.done ? "border-[var(--eh-success)] bg-[var(--eh-success)] text-white" : "border-[var(--eh-border-strong)] bg-white"].join(" ")}>
-                    {entry.done ? "✓" : ""}
-                  </span>
-                  <span className={entry.done ? "text-[var(--eh-text-4)] line-through" : "text-[var(--eh-text-2)]"}>{entry.label}</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 h-1.5 rounded-full bg-[var(--eh-primary-100)]">
-              <div className="h-full rounded-full bg-[var(--eh-primary-600)]" style={{ width: `${(completed / checklist.length) * 100}%` }} />
-            </div>
-            <p className="mt-1 text-[12px] text-[var(--eh-text-3)]">
-              {completed} of {checklist.length} complete
+          {/* Context tip */}
+          <div className="rounded-xl border border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] p-4">
+            <p className="text-[12px] font-semibold text-[var(--eh-primary-700)]">
+              {["Tip: be specific on grade", "Tip: use bullet points", "Tip: salary transparency", "Tip: keep it short"][step]}
             </p>
-          </section>
-
-          <section className="rounded-xl border border-[var(--eh-border)] bg-white p-4">
-            <h3 className="text-[14px] font-semibold text-[var(--eh-text)]">Preview snapshot</h3>
-            <div className="mt-3 space-y-3 text-[12px] text-[var(--eh-text-3)]">
-              <div>
-                <p className="font-semibold text-[var(--eh-text)]">{form.title || "Untitled role"}</p>
-                <p className="mt-0.5">{form.subject} · {form.gradeLevel} · {form.board}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg bg-[var(--surface-base)] px-3 py-2">
-                  <p className="text-[11px] uppercase tracking-[0.06em] text-[var(--eh-text-4)]">Type</p>
-                  <p className="mt-1 font-medium text-[var(--eh-text-2)]">{form.jobType.replaceAll("_", " ")}</p>
-                </div>
-                <div className="rounded-lg bg-[var(--surface-base)] px-3 py-2">
-                  <p className="text-[11px] uppercase tracking-[0.06em] text-[var(--eh-text-4)]">Deadline</p>
-                  <p className="mt-1 font-medium text-[var(--eh-text-2)]">{form.applicationDeadline || "Not set"}</p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-xl border border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] p-4">
-            <p className="text-[13px] font-semibold text-[var(--eh-primary-700)]">Tip: list specific boards</p>
-            <p className="mt-1 text-[12px] text-eh-primary">Posts that mention CBSE/ICSE/IB get 2.4x more qualified applications.</p>
-          </section>
-
-          <section className="rounded-xl border border-[var(--eh-border)] bg-white p-4">
-            <h3 className="mb-2 text-[14px] font-semibold text-[var(--eh-text)]">Required documents</h3>
-            <div className="flex flex-wrap gap-1.5">
-              <span className="eh-chip eh-chip-active">Resume</span>
-              <span className="eh-chip">Additional documents configured in apply flow</span>
-            </div>
-          </section>
+            <p className="mt-1 text-[12px] text-[var(--eh-primary-600)]">
+              {[
+                "Teachers filter by grade level first. Grade 1-5 vs 9-12 makes a big difference in who applies.",
+                "Bullet responsibilities and benefits — teachers scan job posts, not read them.",
+                "Salary-declared posts get 2.4× more qualified applicants. Even a range helps.",
+                "2–3 targeted questions is optimal. More than 4 reduces application completion rates.",
+              ][step]}
+            </p>
+          </div>
         </aside>
       </div>
     </div>

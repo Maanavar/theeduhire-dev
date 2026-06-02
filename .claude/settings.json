@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(node -e \"require\\('cmdk'\\); console.log\\('cmdk ok'\\)\")",
+      "Bash(node -e \"require\\('framer-motion'\\); console.log\\('framer-motion ok'\\)\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\senth\\\\OneDrive\\\\文档\\\\GitHub\\\\theeduhire-dev\" -Directory)",
+      "PowerShell(cd 'c:\\\\Users\\\\senth\\\\OneDrive\\\\문서\\\\GitHub\\\\theeduhire-dev'; Get-ChildItem src/app -Force -Recurse | Where-Object { $_.Name -match \"dashboard\" } | Select-Object FullName)",
+      "PowerShell(cd 'c:\\\\Users\\\\senth\\\\OneDrive\\\\文档\\\\GitHub\\\\theeduhire-dev'; Get-ChildItem 'src\\\\lib' -File | Select-Object Name | Where-Object { $_.Name -match 'permission|policy|role|access' })",
+      "PowerShell(cd 'c:\\\\Users\\\\senth\\\\OneDrive\\\\文档\\\\GitHub\\\\theeduhire-dev'; @\\(Get-ChildItem 'src\\\\app\\\\\\(dashboard\\)' -Recurse -File\\).Count; Get-ChildItem 'src\\\\app\\\\\\(dashboard\\)' -Recurse -File | Select-Object -First 50 Name)",
+      "PowerShell(cd 'c:\\\\Users\\\\senth\\\\OneDrive\\\\文档\\\\GitHub\\\\theeduhire-dev'; \\(Get-ChildItem src/app -Recurse | Where-Object Extension -Match '\\\\.\\(ts|tsx\\)$'\\) | Select-Object -ExpandProperty FullName | Select-Object -First 50)",
+      "PowerShell(cd 'c:\\\\Users\\\\senth\\\\OneDrive\\\\文档\\\\GitHub\\\\theeduhire-dev'; \\(Get-ChildItem src/app -Recurse | Where-Object Extension -Match '\\\\.\\(ts|tsx\\)$'\\) | Select-Object -ExpandProperty FullName)",
+      "PowerShell(cd 'c:\\\\Users\\\\senth\\\\OneDrive\\\\문서\\\\GitHub\\\\theeduhire-dev'; \\(Get-Content prisma/schema.prisma | Select-String -Pattern \"model TeacherProfile|model SchoolProfile|model JobPosting\" -Context 0,20\\) | head -100)",
+      "PowerShell(cd 'c:\\\\Users\\\\senth\\\\OneDrive\\\\문서\\\\GitHub\\\\theeduhire-dev'; \\(Get-Content prisma/schema.prisma\\).Split\\(\"`n\"\\) | Select-String -Pattern \"model TeacherProfile|model SchoolProfile|model JobPosting\" -Context 0,15 | Select-Object -First 80)",
+      "Bash(node -e ' *)",
+      "Bash(xargs grep -l \"matchScore\\\\|rankedCandidate\")",
+      "Bash(xargs grep -l \"profile.*teacher\\\\|teacher.*profile\\\\|TEACHER.*GET\")",
+      "Bash(xargs grep -l \"phone\\\\|whatsapp\")",
+      "Bash(xargs grep -l \"applicant\\\\|teacher\\\\|contact\")",
+      "Bash(xargs grep -l \"canViewContactDetails\\\\|canUseAIShortlist\\\\|canPostJob\\\\|canViewAnalytics\\\\|isTeacherFeatured\")",
+      "Bash(xargs grep -l \"subscription\\\\|featured\\\\|pro\\\\|premium\")",
+      "Bash(xargs grep -l \"view\" -i)",
+      "Bash(taskkill /F /IM \"node.exe\" /T)",
+      "Bash(Start-Sleep -Seconds 2)",
+      "Bash(Get-ChildItem \"c:\\\\Users\\\\senth\\\\OneDrive\\\\문서\\\\GitHub\\\\theeduhire-dev\\\\src\\\\app\\\\api\" -Recurse -Name)",
+      "Bash(Select-Object -First 40)",
+      "Read(//c/Users/senth/OneDrive/**)",
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\senth\\\\OneDrive\\\\문서\\\\GitHub\\\\theeduhire-dev\" -Name | Where-Object { $_ -notmatch \"^node_modules|^\\\\.next\" })",
+      "Bash(npm audit *)",
+      "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); const vulns=d.vulnerabilities||{}; Object.entries\\(vulns\\).filter\\(\\([,v]\\)=>['critical','high'].includes\\(v.severity\\)\\).forEach\\(\\([name,v]\\)=>console.log\\(v.severity.toUpperCase\\(\\)+':', name, '-', v.fixAvailable\\)\\)\")",
+      "Bash(dir \"src\\\\app\\\\\\(public\\)\")",
+      "Bash(dir \"src\\\\app\\\\\\(public\\)\\\\page\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/postcss/package.json'\\).version\\)\")",
+      "Bash(powershell -Command \"\\(Get-Content .env\\) -replace 'EMAIL_FROM=.*', 'EMAIL_FROM=\\\\\"EduHire <onboarding@resend.dev>\\\\\"' | Set-Content .env\")",
+      "Bash(Find c:\\\\Users\\\\senth\\\\OneDrive\\\\文서\\\\GitHub\\\\theeduhire-dev -type f -name \"route.ts\" -o -name \"page.tsx\")",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\senth\\\\OneDrive\\\\문서\\\\GitHub\\\\theeduhire-dev\\\\src\\\\app\\\\api\\\\admin\\\\offline-schools\")",
+      "Bash(Out-Null)",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\senth\\\\OneDrive\\\\문서\\\\GitHub\\\\theeduhire-dev\\\\src\\\\app\\\\api\\\\admin\\\\managed-jobs\")",
+      "Bash(cat src/middleware.ts)",
+      "Bash(cat middleware.ts)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\senth\\OneDrive\\??\\GitHub\\theeduhire-dev\\src\\app\\(dashboard)\\dashboard\\notifications",
+      "c:\\Users\\senth\\OneDrive\\??\\GitHub\\theeduhire-dev\\src\\app\\api\\admin"
+    ]
+  }
+}

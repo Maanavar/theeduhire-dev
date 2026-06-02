@@ -13,7 +13,7 @@ export function JobsPageHeader() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-eh-primary">
           {t.jobs.title}
         </p>
-        <h1 className="mt-2 text-[clamp(1.6rem,3vw,2.1rem)] font-semibold leading-[1.2] tracking-[-0.03em] text-[var(--eh-text)]">
+        <h1 className="mt-2 font-display text-[clamp(1.6rem,3vw,2.1rem)] font-semibold leading-[1.2] tracking-[-0.03em] text-[var(--eh-text)]">
           {t.jobs.subtitle}
         </h1>
         <p className="mt-2 max-w-[480px] text-[14px] leading-[1.65] text-[var(--eh-text-2)]">

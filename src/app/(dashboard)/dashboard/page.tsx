@@ -4,19 +4,24 @@ import { getServerSession } from "next-auth";
 import type { ReactNode } from "react";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { PageShell, SectionCard, SectionHeader } from "@/components/layout/page-shell";
+import { PageShell, Panel, PanelHeader } from "@/components/layout/page-shell";
 import {
   ArrowRight,
   BellRing,
   Bookmark,
   BriefcaseBusiness,
   CalendarClock,
+  Eye,
   FileText,
+  Lock,
   Sparkles,
+  Star,
   UserRoundCog,
+  TrendingUp,
 } from "lucide-react";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import { calculateProfileCompletion, getTeacherApplyReadiness } from "@/lib/profileCompletion";
+import { getTeacherPlan } from "@/lib/subscription";
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -27,7 +32,24 @@ export default async function DashboardPage() {
 
   const userId = session.user.id;
 
-  const [applicationCount, pendingCount, upcomingInterviews, savedCount, profile, resumeCount, user, topRecommendations] = await Promise.all([
+  const now = new Date();
+  const ago30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const ago7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const [
+    applicationCount,
+    pendingCount,
+    upcomingInterviews,
+    savedCount,
+    profile,
+    resumeCount,
+    user,
+    topRecommendations,
+    teacherPlan,
+    profileViews30d,
+    profileViews7d,
+    recentViewers,
+  ] = await Promise.all([
     prisma.application.count({ where: { applicantId: userId } }),
     prisma.application.count({ where: { applicantId: userId, status: "PENDING" } }),
     prisma.interview.findMany({
@@ -58,11 +80,26 @@ export default async function DashboardPage() {
           select: {
             id: true,
             title: true,
-            school: {
-              select: {
-                schoolName: true,
-              },
-            },
+            school: { select: { schoolName: true } },
+          },
+        },
+      },
+    }),
+    getTeacherPlan(userId),
+    prisma.profileView.count({ where: { teacherId: userId, viewedAt: { gte: ago30d } } }),
+    prisma.profileView.count({ where: { teacherId: userId, viewedAt: { gte: ago7d } } }),
+    prisma.profileView.findMany({
+      where: { teacherId: userId, viewerId: { not: null } },
+      orderBy: { viewedAt: "desc" },
+      take: 5,
+      select: {
+        id: true,
+        viewedAt: true,
+        viewer: {
+          select: {
+            name: true,
+            avatarUrl: true,
+            schoolProfile: { select: { schoolName: true } },
           },
         },
       },
@@ -80,8 +117,9 @@ export default async function DashboardPage() {
     preferredGrades: profile?.preferredGrades || [],
     experiences: profile?.experiences || [],
     certifications: profile?.certifications || [],
-    resumes: Array.from({ length: resumeCount }).map((_, index) => ({ id: String(index) })),
+    resumes: Array.from({ length: resumeCount }).map((_, i) => ({ id: String(i) })),
   }).percentage;
+
   const readiness = getTeacherApplyReadiness({
     avatarUrl: user?.avatarUrl,
     bio: profile?.bio,
@@ -93,287 +131,470 @@ export default async function DashboardPage() {
     preferredGrades: profile?.preferredGrades || [],
     experiences: profile?.experiences || [],
     certifications: profile?.certifications || [],
-    resumes: Array.from({ length: resumeCount }).map((_, index) => ({ id: String(index) })),
+    resumes: Array.from({ length: resumeCount }).map((_, i) => ({ id: String(i) })),
   });
+
   const firstName = session.user.name?.split(" ")[0] ?? "Teacher";
   const topMatch = topRecommendations[0] ? Math.round(topRecommendations[0].score * 100) : 0;
-  const firstVisit = applicationCount === 0 && pendingCount === 0 && upcomingInterviews.length === 0 && savedCount === 0;
+  const firstVisit =
+    applicationCount === 0 &&
+    pendingCount === 0 &&
+    upcomingInterviews.length === 0 &&
+    savedCount === 0;
+
+  const metrics = [
+    {
+      label: "Applications",
+      value: applicationCount,
+      helper: "All submitted roles",
+      tone: "brand" as const,
+      href: "/dashboard/applications",
+    },
+    {
+      label: "Pending review",
+      value: pendingCount,
+      helper: "Awaiting school action",
+      tone: "warning" as const,
+      href: "/dashboard/applications",
+    },
+    {
+      label: "Interviews",
+      value: upcomingInterviews.length,
+      helper: upcomingInterviews[0]
+        ? `Next ${new Date(upcomingInterviews[0].scheduledAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+        : "None scheduled",
+      tone: "info" as const,
+      href: "/dashboard/interviews",
+    },
+    {
+      label: "Saved jobs",
+      value: savedCount,
+      helper: "Roles to revisit",
+      tone: "neutral" as const,
+      href: "/dashboard/saved",
+    },
+    {
+      label: "Profile",
+      value: `${completion}%`,
+      helper: completion >= 80 ? "Strong visibility" : "Needs more detail",
+      tone: "success" as const,
+      href: "/dashboard/profile",
+    },
+    {
+      label: "Best AI match",
+      value: topMatch ? `${topMatch}%` : "—",
+      helper: topRecommendations[0]
+        ? topRecommendations[0].job.school.schoolName
+        : "Complete profile to unlock",
+      tone: "brand" as const,
+      href: "/dashboard/recommendations",
+    },
+  ];
+
+  const toneAccent: Record<string, string> = {
+    brand: "bg-[var(--eh-primary-500)]",
+    warning: "bg-amber-400",
+    info: "bg-sky-500",
+    neutral: "bg-slate-400",
+    success: "bg-emerald-500",
+  };
+  const toneValue: Record<string, string> = {
+    brand: "text-[var(--eh-primary-700)]",
+    warning: "text-amber-700",
+    info: "text-sky-700",
+    neutral: "text-[var(--eh-text)]",
+    success: "text-emerald-700",
+  };
 
   return (
-    <PageShell className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <PageShell className="space-y-5 lg:space-y-6">
+      {/* ── Page header ── */}
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--eh-border)] pb-5">
         <div>
-          <h1 className="text-[28px] font-semibold leading-[1.1] tracking-[-0.026em] text-[var(--eh-text)] sm:text-[30px]">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.09em] text-[var(--eh-text-4)]">
+            Teacher dashboard
+          </p>
+          <h1 className="text-[24px] font-semibold leading-[1.15] tracking-[-0.022em] text-[var(--eh-text)] sm:text-[26px]">
             {firstVisit ? `Welcome to EduHire, ${firstName}` : `Welcome back, ${firstName}`}
           </h1>
-          <p className="mt-1.5 max-w-3xl text-[14px] leading-6 text-[var(--eh-text-3)]">
+          <p className="mt-1.5 text-[14px] leading-6 text-[var(--eh-text-3)]">
             {firstVisit
-              ? "Start with your profile, upload your resume, and explore your first set of matched teaching roles."
+              ? "Start with your profile, upload your resume, and explore matched teaching roles."
               : pendingCount > 0
-              ? `${pendingCount} application${pendingCount === 1 ? "" : "s"} are waiting on school review.`
-              : "You're set up to discover fresh roles, track interviews, and stay visible to schools."}
+                ? `${pendingCount} application${pendingCount === 1 ? "" : "s"} waiting on school review.`
+                : "Discover fresh roles, track interviews, and stay visible to schools."}
           </p>
         </div>
         <div className="flex gap-2">
           <Link href="/dashboard/jobs" className="eh-btn eh-btn-secondary">
-            <BriefcaseBusiness size={14} /> Browse jobs
+            <BriefcaseBusiness size={14} />
+            Browse jobs
           </Link>
           <Link href="/dashboard/profile" className="eh-btn eh-btn-primary">
-            <UserRoundCog size={14} /> Update profile
+            <UserRoundCog size={14} />
+            Update profile
           </Link>
         </div>
       </div>
 
       <OnboardingChecklist role="TEACHER" teacherCompletion={completion} />
 
+      {/* ── Profile readiness alert ── */}
       {!readiness.ready ? (
-        <SectionCard className="border-amber-200 bg-amber-50 p-5">
-          <SectionHeader
-            title="Profile readiness"
-            subtitle="You will land in more complete applications once these gaps are closed."
-            actions={
-              <Link href="/dashboard/profile" className="eh-btn eh-btn-primary eh-btn-sm">
-                Finish profile
-              </Link>
-            }
-          />
-          <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)] md:items-start">
-            <div className="rounded-2xl border border-amber-100 bg-white px-4 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-amber-700">Ready to apply</p>
-              <p className="mt-2 text-[32px] font-semibold leading-none tracking-[-0.04em] text-amber-900">{readiness.completion}%</p>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold text-amber-900">
+                Profile not ready to apply
+              </p>
+              <p className="mt-1 text-[13px] text-amber-800">
+                Close these gaps to submit complete applications and rank higher in school searches.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {readiness.blockers.map((blocker) => (
+                  <span
+                    key={blocker}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-white px-2.5 py-1 text-[12px] font-medium text-amber-800"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                    {blocker}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {readiness.blockers.map((blocker) => (
-                <div key={blocker} className="rounded-2xl border border-amber-200 bg-white px-4 py-3 text-[13px] text-amber-900">
-                  {blocker}
-                </div>
-              ))}
+            <div className="flex shrink-0 flex-col items-center rounded-xl border border-amber-200 bg-white px-4 py-3 text-center">
+              <span className="text-[28px] font-bold leading-none tracking-tight text-amber-700">
+                {readiness.completion}%
+              </span>
+              <span className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600">
+                Ready
+              </span>
             </div>
           </div>
-        </SectionCard>
+          <div className="mt-3 border-t border-amber-200 pt-3">
+            <Link href="/dashboard/profile" className="eh-btn eh-btn-primary eh-btn-sm">
+              Finish profile
+            </Link>
+          </div>
+        </div>
       ) : null}
 
+      {/* ── First visit quick start ── */}
       {firstVisit ? (
-        <SectionCard className="border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] p-5">
-          <SectionHeader title="Start Here" subtitle="Three quick steps to unlock better matches and applications." />
+        <Panel className="p-5">
+          <PanelHeader
+            title="Get started"
+            subtitle="Three steps to unlock better matches and applications."
+          />
           <div className="grid gap-3 md:grid-cols-3">
-            <QuickAction
+            <QuickStartStep
+              step={1}
               href="/dashboard/profile"
-              icon={<UserRoundCog size={15} className="text-eh-primary" />}
               title="Finish your profile"
-              body="Add qualification, subjects, city, and a short bio so schools can understand your fit."
+              body="Add qualification, subjects, city, and a short bio."
             />
-            <QuickAction
+            <QuickStartStep
+              step={2}
               href="/dashboard/profile#resume"
-              icon={<FileText size={15} className="text-eh-primary" />}
               title="Upload your resume"
-              body="A resume is mandatory before you can apply for jobs on EduHire."
+              body="Required before you can apply to any job on EduHire."
             />
-            <QuickAction
+            <QuickStartStep
+              step={3}
               href="/dashboard/jobs"
-              icon={<BriefcaseBusiness size={15} className="text-eh-primary" />}
               title="Browse matched jobs"
-              body="Open the jobs workspace to see fit scores, school details, and role requirements."
+              body="See fit scores, school details, and role requirements."
             />
           </div>
-        </SectionCard>
+        </Panel>
       ) : null}
 
+      {/* ── Metrics row ── */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <MetricCard label="Applications" value={String(applicationCount)} helper="All submitted roles" tone="slate" href="/dashboard/applications" />
-        <MetricCard label="Pending review" value={String(pendingCount)} helper="Awaiting school action" tone="amber" href="/dashboard/applications" />
-        <MetricCard label="Interviews" value={String(upcomingInterviews.length)} helper={upcomingInterviews[0] ? `Next ${new Date(upcomingInterviews[0].scheduledAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : "No interviews yet"} tone="indigo" href="/dashboard/interviews" />
-        <MetricCard label="Saved jobs" value={String(savedCount)} helper="Roles you want to revisit" tone="blue" href="/dashboard/saved" />
-        <MetricCard label="Profile completion" value={`${completion}%`} helper={completion >= 80 ? "Strong visibility" : "Add more hiring signals"} tone="emerald" href="/dashboard/profile" />
-        <MetricCard label="Best AI match" value={topMatch ? `${topMatch}%` : "--"} helper={topRecommendations[0] ? topRecommendations[0].job.school.schoolName : "Recommendations will appear here"} tone="violet" href="/dashboard/recommendations" />
+        {metrics.map((m) => (
+          <Link
+            key={m.label}
+            href={m.href}
+            className="group rounded-xl border border-[var(--eh-border)] bg-white px-4 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition-all duration-200 hover:border-[var(--eh-border-strong)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.08)]"
+          >
+            <div className={`mb-3 h-0.5 w-6 rounded-full ${toneAccent[m.tone]}`} />
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--eh-text-4)]">
+              {m.label}
+            </p>
+            <p className={`mt-1.5 text-[26px] font-semibold leading-none tracking-[-0.03em] ${toneValue[m.tone]}`}>
+              {m.value}
+            </p>
+            <p className="mt-2 text-[12px] leading-[1.4] text-[var(--eh-text-3)]">{m.helper}</p>
+          </Link>
+        ))}
       </div>
 
+      {/* ── Recommendations + Interviews ── */}
       <div className="grid gap-4 xl:grid-cols-[1.55fr_1fr]">
-        <SectionCard className="border-[var(--eh-border)] bg-white p-5">
-          <SectionHeader
+        <Panel className="p-5">
+          <PanelHeader
             title="Recommended roles"
-            subtitle="Your strongest current matches based on subject, board, and preference overlap."
+            subtitle="Strongest matches based on subject, board, and preference overlap."
             actions={
-              <Link href="/dashboard/recommendations" className="inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--eh-text-3)] hover:text-[var(--eh-text-2)]">
-                Open workspace <ArrowRight size={13} />
+              <Link
+                href="/dashboard/recommendations"
+                className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--eh-text-3)] hover:text-[var(--eh-text-2)] transition-colors"
+              >
+                Open workspace <ArrowRight size={12} />
               </Link>
             }
           />
-          <div className="space-y-3">
+          <div className="space-y-2">
             {topRecommendations.length === 0 ? (
-              <p className="text-[13px] text-[var(--eh-text-3)]">Complete your profile to unlock personalized recommendations.</p>
+              <p className="text-[13px] text-[var(--eh-text-3)]">
+                Complete your profile to unlock personalized recommendations.
+              </p>
             ) : (
               topRecommendations.map((rec) => (
-                <div key={rec.id} className="grid gap-3 rounded-2xl border border-[var(--eh-border)] p-4 transition-colors hover:border-[var(--eh-border-strong)] md:grid-cols-[1fr_auto] md:items-center">
-                  <div className="min-w-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-[15px] font-semibold text-[var(--eh-text)]">{rec.job.title}</p>
-                        <p className="truncate text-[12px] text-[var(--eh-text-3)]">{rec.job.school.schoolName}</p>
-                      </div>
-                      <span className="rounded-full border border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] px-2.5 py-1 text-[11px] font-semibold text-[var(--eh-primary-700)]">
-                        {Math.round(rec.score * 100)}% match
-                      </span>
-                    </div>
-                    <p className="mt-2 text-[12px] text-[var(--eh-text-2)]">{rec.explanation || "Strong fit for your teaching profile."}</p>
+                <Link
+                  key={rec.id}
+                  href={`/dashboard/jobs?selected=${rec.job.id}`}
+                  className="group flex items-center gap-4 rounded-lg border border-[var(--eh-border)] p-3.5 transition-all hover:border-[var(--eh-border-strong)] hover:bg-[var(--surface-base)]"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-semibold text-[var(--eh-text)]">
+                      {rec.job.title}
+                    </p>
+                    <p className="truncate text-[12px] text-[var(--eh-text-3)]">
+                      {rec.job.school.schoolName}
+                    </p>
+                    {rec.explanation ? (
+                      <p className="mt-1.5 line-clamp-1 text-[12px] text-[var(--eh-text-2)]">
+                        {rec.explanation}
+                      </p>
+                    ) : null}
                   </div>
-                  <Link href={`/dashboard/jobs?selected=${rec.job.id}`} className="eh-btn eh-btn-secondary eh-btn-sm">
-                    View role
-                  </Link>
-                </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    <span className="rounded-md border border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] px-2 py-0.5 text-[11px] font-bold text-[var(--eh-primary-700)]">
+                      {Math.round(rec.score * 100)}%
+                    </span>
+                    <span className="text-[11px] font-medium text-[var(--eh-text-4)] group-hover:text-[var(--eh-primary-600)] transition-colors">
+                      View role →
+                    </span>
+                  </div>
+                </Link>
               ))
             )}
           </div>
-        </SectionCard>
+        </Panel>
 
-        <SectionCard className="border-[var(--eh-border)] bg-white p-5">
-          <SectionHeader
+        <Panel className="p-5">
+          <PanelHeader
             title="Upcoming interviews"
-            subtitle="Your next scheduled conversations with schools."
-            actions={<Link href="/dashboard/interviews" className="text-[12px] font-semibold text-[var(--eh-text-3)] hover:text-[var(--eh-text-2)]">All</Link>}
+            subtitle="Next scheduled conversations with schools."
+            actions={
+              <Link
+                href="/dashboard/interviews"
+                className="text-[12px] font-semibold text-[var(--eh-text-3)] hover:text-[var(--eh-text-2)] transition-colors"
+              >
+                All
+              </Link>
+            }
           />
-          <div className="space-y-3">
+          <div className="space-y-2">
             {upcomingInterviews.length === 0 ? (
-              <p className="text-[13px] text-[var(--eh-text-3)]">No interviews scheduled yet.</p>
+              <div className="rounded-lg border border-dashed border-[var(--eh-border)] px-4 py-6 text-center">
+                <CalendarClock size={20} className="mx-auto mb-2 text-[var(--eh-text-4)]" />
+                <p className="text-[13px] text-[var(--eh-text-3)]">No interviews scheduled yet.</p>
+              </div>
             ) : (
               upcomingInterviews.map((interview) => (
-                <div key={interview.id} className="rounded-2xl border border-[var(--eh-border)] p-4">
-                  <p className="text-[14px] font-semibold text-[var(--eh-text)]">{interview.application.job.title}</p>
-                  <p className="mt-0.5 text-[12px] text-[var(--eh-text-3)]">{interview.application.job.school.schoolName}</p>
-                  <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[var(--eh-border)] bg-[var(--surface-base)] px-2.5 py-1 text-[11px] font-medium text-[var(--eh-text-2)]">
-                    <CalendarClock size={12} />
-                    {new Date(interview.scheduledAt).toLocaleString("en-IN", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
-                  </p>
+                <div
+                  key={interview.id}
+                  className="flex gap-3 rounded-lg border border-[var(--eh-border)] p-3.5"
+                >
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--eh-primary-50)]">
+                    <CalendarClock size={14} className="text-[var(--eh-primary-600)]" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-semibold text-[var(--eh-text)]">
+                      {interview.application.job.title}
+                    </p>
+                    <p className="truncate text-[12px] text-[var(--eh-text-3)]">
+                      {interview.application.job.school.schoolName}
+                    </p>
+                    <p className="mt-1.5 text-[11px] font-medium text-[var(--eh-text-4)]">
+                      {new Date(interview.scheduledAt).toLocaleString("en-IN", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
+                    </p>
+                  </div>
                 </div>
               ))
             )}
           </div>
-        </SectionCard>
+        </Panel>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <SectionCard className="border-[var(--eh-border)] bg-white p-5">
-          <SectionHeader title="Career momentum" subtitle="Keep your search sharp with a few focused actions." />
-          <div className="grid gap-3 md:grid-cols-2">
+      {/* ── Profile views widget ── */}
+      <ProfileViewsWidget
+        views30d={profileViews30d}
+        views7d={profileViews7d}
+        isPro={teacherPlan.plan === "PRO"}
+        recentViewers={recentViewers as RecentViewer[]}
+      />
+
+      {/* ── Career momentum + Profile signal ── */}
+      <div className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
+        <Panel className="p-5">
+          <PanelHeader title="Career momentum" subtitle="Stay sharp with focused, high-impact actions." />
+          <div className="grid gap-3 sm:grid-cols-2">
             <QuickAction
               href="/dashboard/applications"
-              icon={<FileText size={15} className="text-eh-primary" />}
+              icon={<FileText size={15} />}
               title="Track applications"
-              body="See status changes, withdraw where needed, and follow each school timeline."
+              body="Monitor status changes and school timelines."
+              tone="brand"
             />
             <QuickAction
               href="/dashboard/jobs"
-              icon={<Sparkles size={15} className="text-eh-primary" />}
-              title="Explore fresh openings"
-              body="Browse active teaching jobs across schools, boards, and grade levels."
+              icon={<Sparkles size={15} />}
+              title="Explore openings"
+              body="Browse active roles across boards and grades."
+              tone="violet"
             />
             <QuickAction
               href="/dashboard/saved"
-              icon={<Bookmark size={15} className="text-eh-primary" />}
+              icon={<Bookmark size={15} />}
               title="Revisit saved roles"
-              body="Return to bookmarked opportunities before schools close the shortlist."
+              body="Return before schools close the shortlist."
+              tone="amber"
             />
             <QuickAction
               href="/dashboard/alerts"
-              icon={<BellRing size={15} className="text-eh-primary" />}
+              icon={<BellRing size={15} />}
               title="Tune job alerts"
-              body="Get the right roles sooner with cleaner subject and board preferences."
+              body="Get the right roles with cleaner filters."
+              tone="emerald"
             />
           </div>
-        </SectionCard>
+        </Panel>
 
-        <SectionCard className="overflow-hidden border-[var(--eh-primary-100)] bg-[linear-gradient(180deg,#ffffff_0%,#f6f9fc_100%)] p-5">
-          <div className="mb-4">
-            <h2 className="text-[17px] font-semibold tracking-[-0.018em] text-[var(--eh-text)]">Profile signal</h2>
-            <p className="mt-1 text-[13px] leading-5 text-[var(--eh-text-3)]">
-              {completion >= 80
-                ? "Your profile is in a strong place for search and matching."
-                : "A few more details will push you higher in search and matching."}
-            </p>
+        <Panel className="flex flex-col p-5">
+          <PanelHeader title="Profile signal" compact />
+          <div className="flex flex-1 flex-col gap-3">
+            <SignalTile
+              icon={<TrendingUp size={14} />}
+              label="Completion"
+              value={`${completion}%`}
+              helper={completion >= 80 ? "High visibility" : "Needs polish"}
+              tone={completion >= 80 ? "success" : "warning"}
+            />
+            <SignalTile
+              icon={<FileText size={14} />}
+              label="Saved resumes"
+              value={String(resumeCount)}
+              helper={resumeCount > 0 ? "Ready to apply" : "Add one resume"}
+              tone={resumeCount > 0 ? "success" : "neutral"}
+            />
+            <SignalTile
+              icon={<Sparkles size={14} />}
+              label="Best match"
+              value={topMatch ? `${topMatch}%` : "—"}
+              helper={
+                topRecommendations[0] ? topRecommendations[0].job.title : "Unlock with profile"
+              }
+              tone="brand"
+            />
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <SignalTile label="Completion" value={`${completion}%`} helper={completion >= 80 ? "High visibility" : "Needs polish"} />
-            <SignalTile label="Saved resumes" value={String(resumeCount)} helper={resumeCount > 0 ? "Ready to apply" : "Add one resume"} />
-            <SignalTile label="Best match" value={topMatch ? `${topMatch}%` : "--"} helper={topRecommendations[0] ? topRecommendations[0].job.title : "Unlock with profile depth"} />
-          </div>
-          <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] px-4 py-3">
-            <p className="text-[13px] text-[var(--eh-text-2)]">Keep your profile current so schools see the right subjects, boards, and classroom strengths.</p>
-            <Link href="/dashboard/profile" className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--eh-primary-500)] px-3 py-1.5 text-[12px] font-semibold text-white transition-transform hover:-translate-y-0.5 hover:bg-[var(--eh-primary-700)]">
-              Open profile <ArrowRight size={13} />
+          <div className="mt-4 border-t border-[var(--eh-border)] pt-4">
+            <Link
+              href="/dashboard/profile"
+              className="flex w-full items-center justify-between rounded-lg bg-[var(--eh-primary-600)] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[var(--eh-primary-700)]"
+            >
+              Open profile
+              <ArrowRight size={14} />
             </Link>
           </div>
-        </SectionCard>
+        </Panel>
       </div>
 
-      <SectionCard className="border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] p-5">
-        <div className="flex items-start gap-3">
-          <BellRing className="mt-0.5 h-4 w-4 text-[var(--eh-primary-700)]" />
-          <p className="text-sm text-[var(--eh-primary-700)]">
-            Stay in the first wave when matching roles go live.
-            <Link href="/dashboard/alerts" className="ml-1 font-semibold underline">
-              Configure alerts
-            </Link>
-          </p>
+      {/* ── Alert nudge ── */}
+      <div className="flex items-center gap-3 rounded-xl border border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] px-4 py-3">
+        <BellRing size={15} className="shrink-0 text-[var(--eh-primary-600)]" />
+        <p className="flex-1 text-[13px] text-[var(--eh-primary-700)]">
+          Stay in the first wave when matching roles go live.
+        </p>
+        <Link
+          href="/dashboard/alerts"
+          className="shrink-0 text-[13px] font-semibold text-[var(--eh-primary-700)] underline underline-offset-2 hover:text-[var(--eh-primary-900)]"
+        >
+          Configure alerts
+        </Link>
+      </div>
+
+      {/* ── Teacher Pro upsell (free plan only) ── */}
+      {teacherPlan.plan === "FREE" && (
+        <div className="flex flex-col gap-4 rounded-xl border border-[var(--eh-border)] bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50">
+              <Star size={16} className="text-amber-600" />
+            </span>
+            <div>
+              <p className="text-[14px] font-semibold text-[var(--eh-text)]">
+                Unlock Teacher Pro — ₹199/month
+              </p>
+              <p className="mt-1 text-[13px] leading-[1.6] text-[var(--eh-text-3)]">
+                Priority placement in school searches · Instant job alerts · Profile view analytics
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/dashboard/subscription"
+            className="eh-btn eh-btn-secondary shrink-0"
+          >
+            See Pro features <ArrowRight size={13} />
+          </Link>
         </div>
-      </SectionCard>
+      )}
     </PageShell>
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  helper,
-  tone,
-  href,
-}: {
-  label: string;
-  value: string;
-  helper: string;
-  tone: "slate" | "amber" | "indigo" | "blue" | "emerald" | "violet";
-  href?: string;
-}) {
-  const toneMap = {
-    slate: { shell: "border-slate-200 bg-white", chip: "bg-slate-700", value: "text-slate-900" },
-    amber: { shell: "border-amber-200 bg-white", chip: "bg-amber-500", value: "text-amber-700" },
-    indigo: { shell: "border-indigo-200 bg-white", chip: "bg-indigo-600", value: "text-indigo-700" },
-    blue: { shell: "border-sky-200 bg-white", chip: "bg-sky-500", value: "text-sky-700" },
-    emerald: { shell: "border-emerald-200 bg-white", chip: "bg-emerald-500", value: "text-emerald-700" },
-    violet: { shell: "border-violet-200 bg-white", chip: "bg-violet-500", value: "text-violet-700" },
-  };
-  const palette = toneMap[tone];
-  const inner = (
-    <>
-      <div className="relative flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--eh-text-3)]">{label}</p>
-          <p className={`mt-3 text-[36px] font-semibold leading-none tracking-[-0.04em] md:text-[40px] ${palette.value}`}>{value}</p>
-        </div>
-        <span className={`mt-1 inline-flex h-2.5 w-2.5 rounded-full ${palette.chip}`}>
-          <span className="sr-only">Live</span>
-        </span>
-      </div>
-      <div className="relative mt-4 flex items-center justify-between gap-3">
-        <p className="text-[12px] text-[var(--eh-text-3)]">{helper}</p>
-        <span className="h-px flex-1 bg-black/5" />
-      </div>
-    </>
-  );
-  const cls = `group relative overflow-hidden rounded-2xl border p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-all duration-200 hover:border-[var(--eh-border-strong)] hover:shadow-[0_8px_24px_rgba(15,23,42,0.06)] ${palette.shell}${href ? " cursor-pointer" : ""}`;
-  if (href) return <Link href={href} className={cls}>{inner}</Link>;
-  return <div className={cls}>{inner}</div>;
+// ── Types ──────────────────────────────────────────────────────────────────
+
+interface RecentViewer {
+  id: string;
+  viewedAt: Date;
+  viewer: {
+    name: string | null;
+    avatarUrl: string | null;
+    schoolProfile: { schoolName: string } | null;
+  } | null;
 }
 
-function SignalTile({ label, value, helper }: { label: string; value: string; helper: string }) {
+// ── Sub-components ─────────────────────────────────────────────────────────
+
+function QuickStartStep({
+  step,
+  href,
+  title,
+  body,
+}: {
+  step: number;
+  href: string;
+  title: string;
+  body: string;
+}) {
   return (
-    <div className="rounded-2xl border border-[var(--eh-border)] bg-white p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--eh-text-3)]">{label}</p>
-      <p className="mt-2 text-[30px] font-semibold leading-none tracking-[-0.04em] text-[var(--eh-text)]">{value}</p>
-      <p className="mt-2 text-[12px] text-[var(--eh-text-3)]">{helper}</p>
-    </div>
+    <Link
+      href={href}
+      className="group flex gap-3 rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] p-4 transition-all hover:border-[var(--eh-border-strong)] hover:bg-white hover:shadow-[0_4px_16px_rgba(15,23,42,0.07)]"
+    >
+      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--eh-primary-600)] text-[10px] font-bold text-white">
+        {step}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[13px] font-semibold text-[var(--eh-text)]">{title}</p>
+        <p className="mt-0.5 text-[12px] leading-5 text-[var(--eh-text-3)]">{body}</p>
+      </div>
+    </Link>
   );
 }
 
@@ -382,19 +603,198 @@ function QuickAction({
   icon,
   title,
   body,
+  tone,
 }: {
   href: string;
   icon: ReactNode;
   title: string;
   body: string;
+  tone: "brand" | "violet" | "amber" | "emerald";
+}) {
+  const iconStyle: Record<typeof tone, string> = {
+    brand: "bg-[var(--eh-primary-50)] text-[var(--eh-primary-600)]",
+    violet: "bg-violet-50 text-violet-600",
+    amber: "bg-amber-50 text-amber-600",
+    emerald: "bg-emerald-50 text-emerald-600",
+  };
+  return (
+    <Link
+      href={href}
+      className="flex gap-3 rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] p-4 transition-all hover:border-[var(--eh-border-strong)] hover:bg-white hover:shadow-[0_4px_16px_rgba(15,23,42,0.07)]"
+    >
+      <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconStyle[tone]}`}>
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[13px] font-semibold text-[var(--eh-text)]">{title}</p>
+        <p className="mt-0.5 text-[12px] leading-5 text-[var(--eh-text-3)]">{body}</p>
+      </div>
+    </Link>
+  );
+}
+
+function SignalTile({
+  icon,
+  label,
+  value,
+  helper,
+  tone,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  helper: string;
+  tone: "brand" | "success" | "warning" | "neutral";
+}) {
+  const valueColor: Record<typeof tone, string> = {
+    brand: "text-[var(--eh-primary-700)]",
+    success: "text-emerald-700",
+    warning: "text-amber-700",
+    neutral: "text-[var(--eh-text)]",
+  };
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-[var(--eh-border)] px-3.5 py-3">
+      <span className="text-[var(--eh-text-4)]">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">
+          {label}
+        </p>
+        <p className="mt-0.5 text-[11px] leading-4 text-[var(--eh-text-3)]">{helper}</p>
+      </div>
+      <span className={`text-[18px] font-bold leading-none tracking-tight ${valueColor[tone]}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function ProfileViewsWidget({
+  views30d,
+  views7d,
+  isPro,
+  recentViewers,
+}: {
+  views30d: number;
+  views7d: number;
+  isPro: boolean;
+  recentViewers: RecentViewer[];
 }) {
   return (
-    <Link href={href} className="rounded-2xl border border-[var(--eh-border)] bg-white p-4 transition-all hover:border-[var(--eh-border-strong)] hover:bg-[var(--surface-base)] hover:shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-      <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--eh-primary-50)]">
-        {icon}
+    <Panel className="p-5">
+      <PanelHeader
+        title="Profile views"
+        subtitle="Schools and recruiters who viewed your public profile."
+        actions={
+          isPro ? null : (
+            <Link
+              href="/dashboard/subscription"
+              className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
+            >
+              <Star size={10} /> Upgrade to Pro
+            </Link>
+          )
+        }
+      />
+
+      {/* Stats row */}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] px-4 py-3 text-center">
+          <p className="text-[24px] font-bold leading-none tracking-tight text-[var(--eh-primary-700)]">
+            {isPro ? views30d : "—"}
+          </p>
+          <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--eh-text-4)]">
+            Last 30 days
+          </p>
+        </div>
+        <div className="rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] px-4 py-3 text-center">
+          <p className="text-[24px] font-bold leading-none tracking-tight text-[var(--eh-primary-700)]">
+            {isPro ? views7d : "—"}
+          </p>
+          <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--eh-text-4)]">
+            Last 7 days
+          </p>
+        </div>
       </div>
-      <p className="text-[14px] font-semibold text-[var(--eh-text)]">{title}</p>
-      <p className="mt-1 text-[12px] leading-5 text-[var(--eh-text-3)]">{body}</p>
-    </Link>
+
+      {isPro ? (
+        recentViewers.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-[var(--eh-border)] px-4 py-6 text-center">
+            <Eye size={18} className="mx-auto mb-2 text-[var(--eh-text-4)]" />
+            <p className="text-[13px] text-[var(--eh-text-3)]">
+              No viewers yet — schools will appear here when they visit your profile.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">
+              Recent viewers
+            </p>
+            {recentViewers.map((v) => (
+              <div
+                key={v.id}
+                className="flex items-center gap-3 rounded-lg border border-[var(--eh-border)] px-3.5 py-2.5"
+              >
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--eh-primary-50)] text-[13px] font-bold text-[var(--eh-primary-700)]">
+                  {v.viewer?.name?.charAt(0) ?? "?"}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-semibold text-[var(--eh-text)]">
+                    {v.viewer?.name ?? "Unknown"}
+                  </p>
+                  {v.viewer?.schoolProfile?.schoolName && (
+                    <p className="truncate text-[12px] text-[var(--eh-text-3)]">
+                      {v.viewer.schoolProfile.schoolName}
+                    </p>
+                  )}
+                </div>
+                <span className="shrink-0 text-[11px] text-[var(--eh-text-4)]">
+                  {new Date(v.viewedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                </span>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
+        <div className="relative overflow-hidden rounded-xl border border-[var(--eh-border)]">
+          {/* Ghost rows */}
+          <div className="space-y-2 p-3 blur-sm select-none pointer-events-none" aria-hidden>
+            {[
+              { name: "Priya Sharma", school: "Delhi Public School" },
+              { name: "Rahul Verma", school: "The Heritage School" },
+              { name: "Anjali Menon", school: "Podar International" },
+            ].map((g) => (
+              <div
+                key={g.name}
+                className="flex items-center gap-3 rounded-lg bg-[var(--surface-base)] px-3.5 py-2.5"
+              >
+                <div className="h-8 w-8 rounded-full bg-[var(--eh-primary-100)]" />
+                <div>
+                  <p className="text-[13px] font-semibold text-[var(--eh-text)]">{g.name}</p>
+                  <p className="text-[12px] text-[var(--eh-text-3)]">{g.school}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Lock overlay */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70 backdrop-blur-[2px]">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-200 bg-amber-50">
+              <Lock size={16} className="text-amber-600" />
+            </div>
+            <div className="text-center">
+              <p className="text-[13px] font-semibold text-[var(--eh-text)]">See who viewed your profile</p>
+              <p className="mt-0.5 text-[12px] text-[var(--eh-text-3)]">
+                Upgrade to Pro to unlock viewer insights
+              </p>
+            </div>
+            <Link
+              href="/dashboard/subscription"
+              className="eh-btn eh-btn-secondary"
+            >
+              Upgrade to Pro <ArrowRight size={13} />
+            </Link>
+          </div>
+        </div>
+      )}
+    </Panel>
   );
 }

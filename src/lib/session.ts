@@ -23,26 +23,22 @@ export async function requireAuth(allowedRoles?: UserRole[]) {
   }
 
   const db = prisma as any;
-  const activeSession = await db.userSession.findFirst({
-    where: {
-      userId: session.user.id,
-      sessionToken,
-      revokedAt: null,
-    },
-    select: { id: true },
-  });
+
+  // Single round-trip: validate session + fetch suspension state together.
+  const [activeSession, accountState] = await Promise.all([
+    db.userSession.findFirst({
+      where: { userId: session.user.id, sessionToken, revokedAt: null },
+      select: { id: true },
+    }),
+    db.user.findUnique({
+      where: { id: session.user.id },
+      select: { isSuspended: true, suspendedUntil: true },
+    }),
+  ]);
 
   if (!activeSession) {
     return { error: "Session was revoked. Please sign in again.", status: 401 as const };
   }
-
-  const accountState = await db.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      isSuspended: true,
-      suspendedUntil: true,
-    },
-  });
 
   const suspensionActive =
     !!accountState?.isSuspended &&

@@ -90,7 +90,11 @@ export default function Footer() {
 
         <div className="flex flex-wrap items-center justify-between gap-3 py-5 text-[12px] text-[var(--eh-text-3)]">
           <span>&copy; 2026 EduHire Technologies Pvt Ltd. All rights reserved.</span>
-          <span>Chennai / Coimbatore / Madurai launch conversations</span>
+          <div className="flex items-center gap-4">
+            <Link href="/privacy" className="hover:text-[var(--eh-text)]">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-[var(--eh-text)]">Terms of Service</Link>
+            <span>Chennai / Coimbatore / Madurai</span>
+          </div>
         </div>
       </div>
     </footer>

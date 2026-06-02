@@ -135,3 +135,66 @@ export function updateTeacherVerification(
     "Teacher verification action failed"
   );
 }
+
+export type CreateTeacherPayload = {
+  name: string; email: string; password: string; phone?: string;
+  city?: string; subjects?: string[]; qualification?: string; experience?: string; bio?: string;
+};
+
+export function adminCreateTeacher(payload: CreateTeacherPayload) {
+  return apiRequest<{ id: string; name: string; email: string }>(
+    "/api/admin/teachers",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+    "Failed to create teacher"
+  );
+}
+
+export type EditTeacherPayload = Partial<CreateTeacherPayload> & { userId: string };
+
+export function adminEditTeacher(payload: EditTeacherPayload) {
+  return apiRequest<void>(
+    "/api/admin/teachers",
+    { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+    "Failed to update teacher"
+  );
+}
+
+export function adminDeleteTeacher(userId: string) {
+  return apiRequest<void>(
+    `/api/admin/teachers?userId=${userId}`,
+    { method: "DELETE" },
+    "Failed to delete teacher"
+  );
+}
+
+export type CreateSchoolPayload = {
+  name: string; email: string; password: string; phone?: string;
+  schoolName: string; city: string; board?: string;
+  address?: string; website?: string; about?: string; udiseCode?: string;
+};
+
+export function adminCreateSchool(payload: CreateSchoolPayload) {
+  return apiRequest<{ id: string; name: string; email: string }>(
+    "/api/admin/schools",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+    "Failed to create school"
+  );
+}
+
+export type EditSchoolPayload = Partial<Omit<CreateSchoolPayload, "schoolName"> & { schoolName?: string }> & { schoolId: string };
+
+export function adminEditSchool(payload: EditSchoolPayload) {
+  return apiRequest<void>(
+    "/api/admin/schools",
+    { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+    "Failed to update school"
+  );
+}
+
+export function adminDeleteSchool(schoolId: string) {
+  return apiRequest<void>(
+    `/api/admin/schools?schoolId=${schoolId}`,
+    { method: "DELETE" },
+    "Failed to delete school"
+  );
+}

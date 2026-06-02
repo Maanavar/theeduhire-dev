@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { sendEmail } from "@/lib/email";
+import { sendVerificationEmail } from "@/lib/email";
 import { generateVerificationToken } from "@/lib/auth";
 import { SUBJECTS } from "@/config/constants";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -16,6 +16,7 @@ import {
 } from "@/lib/idempotency";
 import { publishDomainEvent } from "@/lib/domain-events";
 import { AUTH_RATE_LIMIT_WINDOW_MS, AUTH_REGISTER_IP_LIMIT } from "@/config/constants";
+import { sanitizePlainText } from "@/lib/sanitize";
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(100),
@@ -94,7 +95,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { name, email, password, role, phone, teacherProfile, schoolProfile } = parsed.data;
+    const { name: rawName, email, password, role, phone, teacherProfile, schoolProfile } = parsed.data;
+    const name = sanitizePlainText(rawName);
     const normalizedEmail = email.toLowerCase().trim();
     const requestHash = stableHash({
       name,
@@ -205,25 +207,9 @@ export async function POST(req: NextRequest) {
 
     // Send verification email non-blocking
     const token = generateVerificationToken(user.id);
-    const verifyUrl = `${process.env.NEXTAUTH_URL || "https://theeduhire.in"}/auth/verify?token=${token}`;
-    const verificationHtml = `
-      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f4f0;padding:32px 16px;color:#1a1a18">
-        <div style="background:#fff;border-radius:16px;padding:40px;max-width:540px;margin:0 auto;border:1px solid #e8e7e0">
-          <div style="font-size:20px;font-weight:700;color:#2a7a4e;margin-bottom:32px">EduHire</div>
-          <h1 style="font-size:22px;font-weight:700;margin:0 0 12px">Verify your email address</h1>
-          <p style="font-size:15px;line-height:1.6;color:#444441;margin:0 0 16px">Hi ${name},</p>
-          <p style="font-size:15px;line-height:1.6;color:#444441;margin:0 0 16px">Thanks for joining EduHire! Please verify your email address to activate your account.</p>
-          <a href="${verifyUrl}" style="display:inline-block;padding:13px 28px;background:#2a7a4e;color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:15px;margin:8px 0 24px">Verify Email Address</a>
-          <p style="font-size:13px;color:#888780;margin:0">This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.</p>
-        </div>
-      </div>
-    `;
-
-    sendEmail({
-      to: normalizedEmail,
-      subject: "Verify your EduHire account",
-      html: verificationHtml,
-    }).catch((err) => console.error("Verification email error:", err));
+    sendVerificationEmail(normalizedEmail, name, token).catch((err) =>
+      console.error("Verification email error:", err)
+    );
 
     const responseBody = {
       success: true,

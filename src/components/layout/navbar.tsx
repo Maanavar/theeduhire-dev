@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useLang } from "@/lib/i18n/context";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 const TEACHER_AUTH_LINKS = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
@@ -46,13 +47,7 @@ export default function Navbar() {
   const isAuthed = status === "authenticated" && !!session?.user;
   const isSchool = session?.user?.role === "SCHOOL_ADMIN";
   const dashboardHref = isSchool ? "/dashboard/school" : "/dashboard";
-  const initials =
-    session?.user?.name
-      ?.split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? "")
-      .join("") || "U";
+
 
   const isHomepage = pathname === "/";
 
@@ -61,6 +56,7 @@ export default function Navbar() {
     { href: "/#for-schools", label: t.nav.forSchools },
     { href: "/#for-teachers", label: t.nav.forTeachers },
     { href: "/#platform", label: t.nav.howItWorks },
+    { href: "/#pricing", label: t.nav.pricing },
     { href: "/#questions", label: t.nav.faq },
     { href: "/#contact", label: t.nav.contact },
   ];
@@ -195,9 +191,7 @@ export default function Navbar() {
                   onClick={() => setUserMenuOpen((prev) => !prev)}
                   className="flex items-center gap-2 rounded-full px-2 py-1.5 transition-colors hover:bg-[var(--surface-base)]"
                 >
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand-gradient text-xs font-bold text-white">
-                    {initials}
-                  </span>
+                  <UserAvatar name={session.user.name || ""} avatarUrl={session.user.image} size={32} />
                   <span className="hidden text-left lg:block">
                     <span className="block max-w-[120px] truncate text-[12px] font-semibold leading-none text-[var(--eh-text)]">
                       {session.user.name}

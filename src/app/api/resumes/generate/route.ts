@@ -7,7 +7,8 @@ import { requireAuth } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase";
 import { z } from "zod";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 import { createStorageObjectRef, ensureBucket, getResumeAccessPath } from "@/lib/storage";
 import { RESUME_BUCKET } from "@/config/constants";
 
@@ -288,7 +289,12 @@ export async function POST(req: NextRequest) {
       await sendProgress(encoder, writer, 40, "Converting to PDF...");
 
       // Step 3: Generate PDF (40-70%)
-      browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+      browser = await puppeteer.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
+      });
       await sendProgress(encoder, writer, 50, "Rendering PDF...");
 
       const page = await browser.newPage();

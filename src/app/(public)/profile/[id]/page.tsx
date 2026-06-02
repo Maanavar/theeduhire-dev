@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MapPin, Briefcase, Calendar, Clock, ArrowRight, ShieldCheck } from "lucide-react";
+import { MapPin, Briefcase, Calendar, Clock, ArrowRight, ShieldCheck, Star } from "lucide-react";
+import { ProfileViewLogger } from "@/components/profile/profile-view-logger";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -22,13 +23,28 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
     const { user, profile } = data.data;
 
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://theeduhire.in";
+    const canonicalUrl = `${baseUrl}/profile/${id}`;
+    const subjectLine = profile.subjects?.length ? ` Teaches ${profile.subjects.slice(0, 3).join(", ")}.` : "";
+    const locationLine = profile.city ? ` Based in ${profile.city}.` : "";
+    const description = (profile.bio || `${user.name} is a teacher seeking opportunities in Tamil Nadu.${subjectLine}${locationLine}`).slice(0, 160);
+
     return {
-      title: `${user.name} - Teacher Profile | EduHire`,
-      description: profile.bio || `${user.name} is a teacher looking for opportunities in Tamil Nadu`,
+      title: `${user.name} — Teacher Profile | EduHire`,
+      description,
+      alternates: {
+        canonical: canonicalUrl,
+      },
       openGraph: {
-        title: `${user.name} - Teaching Profile`,
-        description: profile.bio || `Check out ${user.name}'s teaching profile on EduHire`,
+        title: `${user.name} — Teacher Profile | EduHire`,
+        description,
+        url: canonicalUrl,
         type: "profile",
+      },
+      twitter: {
+        card: "summary",
+        title: `${user.name} — Teacher Profile | EduHire`,
+        description,
       },
     };
   } catch {
@@ -88,6 +104,7 @@ export default async function PublicProfilePage({ params }: Props) {
     if (!apiData.success) notFound();
 
     const { user, profile, resumeCount } = apiData.data;
+    const isFeatured = user.isFeatured ?? false;
 
     const jsonLd = {
       "@context": "https://schema.org",
@@ -137,6 +154,7 @@ export default async function PublicProfilePage({ params }: Props) {
 
     return (
       <div className="bg-[var(--surface-base)]">
+        <ProfileViewLogger teacherId={id} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
         <section className="border-b border-[var(--eh-border)] bg-white px-5 pb-8 pt-10 md:px-8 md:pt-12">
@@ -153,9 +171,17 @@ export default async function PublicProfilePage({ params }: Props) {
                 )}
               </div>
               <div>
-                <h1 className="text-[clamp(1.4rem,2.5vw,1.8rem)] font-semibold leading-[1.2] tracking-[-0.02em] text-[var(--eh-text)]">
-                  {user.name}
-                </h1>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h1 className="text-[clamp(1.4rem,2.5vw,1.8rem)] font-semibold leading-[1.2] tracking-[-0.02em] text-[var(--eh-text)]">
+                    {user.name}
+                  </h1>
+                  {isFeatured && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200">
+                      <Star size={10} className="fill-amber-500 text-amber-500" />
+                      Featured
+                    </span>
+                  )}
+                </div>
                 <div className="mt-1.5 flex flex-wrap items-center gap-3">
                   {profile.currentSchool && (
                     <span className="text-[13px] text-[var(--eh-text-2)]">{profile.currentSchool}</span>
@@ -163,6 +189,11 @@ export default async function PublicProfilePage({ params }: Props) {
                   {profile.city && (
                     <span className="inline-flex items-center gap-1 text-[13px] text-[var(--eh-text-3)]">
                       <MapPin size={13} /> {profile.city}
+                    </span>
+                  )}
+                  {profile.experience && (
+                    <span className="inline-flex items-center gap-1 text-[13px] text-[var(--eh-text-3)]">
+                      <Briefcase size={13} /> {profile.experience}
                     </span>
                   )}
                   <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${getAvailabilityColor(profile.availabilityStatus)}`}>

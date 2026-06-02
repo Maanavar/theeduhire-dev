@@ -169,8 +169,8 @@
     border-radius: 6px;
   }
   ::selection {
-    background: rgba(10,102,194,0.14);
-    color: var(--color-brand-800);
+    background: rgba(10,102,194,0.28);
+    color: var(--color-brand-900);
   }
 
   .app-linkedin {

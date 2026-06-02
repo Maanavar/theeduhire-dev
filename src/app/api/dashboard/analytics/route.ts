@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 import type { SchoolAnalytics } from "@/types";
 import { cacheTags } from "@/lib/cache-tags";
+import { canViewAnalytics } from "@/lib/subscription";
 
 async function computeSchoolAnalytics(schoolId?: string): Promise<SchoolAnalytics> {
   const jobs = await prisma.jobPosting.findMany({
@@ -166,6 +167,14 @@ export async function GET() {
 
     let schoolId: string | undefined;
     if (auth.user.role === "SCHOOL_ADMIN") {
+      const allowed = await canViewAnalytics(auth.user.id);
+      if (!allowed) {
+        return NextResponse.json(
+          { success: false, error: "PLAN_UPGRADE_REQUIRED", message: "Analytics is available on the Pro plan. Upgrade to access your full hiring funnel." },
+          { status: 403 }
+        );
+      }
+
       const schoolProfile = await prisma.schoolProfile.findUnique({
         where: { userId: auth.user.id },
         select: { id: true },

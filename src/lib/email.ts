@@ -20,7 +20,13 @@ async function deliverEmail(payload: Parameters<typeof resend.emails.send>[0]) {
     return { success: false, skipped: true, reason: "missing_resend_api_key" } as const;
   }
 
-  return resend.emails.send(payload);
+  const result = await resend.emails.send(payload);
+  if ((result as any).error) {
+    console.error("[email] Resend error:", JSON.stringify((result as any).error), { to: payload.to, subject: payload.subject });
+  } else {
+    console.log("[email] Sent OK:", { to: payload.to, subject: payload.subject, id: (result as any).data?.id });
+  }
+  return result;
 }
 
 // ── Shared HTML helpers ──────────────────────────────────────────────────────
@@ -69,14 +75,8 @@ export async function sendVerificationEmail(email: string, name: string, token: 
     <p style="font-size:13px;color:#888780">This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.</p>
   `);
 
-  // For development: log the email instead of sending
   if (process.env.NODE_ENV === "development") {
-    console.log("📧 DEVELOPMENT MODE - Email would be sent:");
-    console.log(`To: ${email}`);
-    console.log(`Subject: Verify your EduHire account`);
-    console.log(`Verify URL: ${verifyUrl}`);
-    console.log(`HTML: ${html}`);
-    return { success: true };
+    console.log(`[dev email] To: ${email} | Verify URL: ${verifyUrl}`);
   }
 
   return deliverEmail({ from: FROM, to: email, subject: "Verify your EduHire account", html });
@@ -239,7 +239,63 @@ export async function sendContactNotification({
   });
 }
 
-// ── 6. Job Alert Digest (to Teacher) ────────────────────────────────────────
+// ── 6. Managed Recruitment Request Notification (to Admin) ──────────────────
+
+export async function sendManagedRecruitmentNotification({
+  contactName,
+  contactEmail,
+  contactPhone,
+  schoolName,
+  jobTitle,
+  jobDescription,
+  salaryBudgetMin,
+  salaryBudgetMax,
+  targetJoinDate,
+}: {
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  schoolName: string;
+  jobTitle: string;
+  jobDescription: string;
+  salaryBudgetMin?: number | null;
+  salaryBudgetMax?: number | null;
+  targetJoinDate?: string | null;
+}) {
+  const adminEmail = process.env.ADMIN_EMAIL || "hello@theeduhire.in";
+  const salaryRange =
+    salaryBudgetMin && salaryBudgetMax
+      ? `₹${salaryBudgetMin.toLocaleString("en-IN")} – ₹${salaryBudgetMax.toLocaleString("en-IN")}/mo`
+      : salaryBudgetMin
+      ? `From ₹${salaryBudgetMin.toLocaleString("en-IN")}/mo`
+      : "Not specified";
+
+  const html = emailWrapper(`
+    <h1>New Managed Recruitment Request</h1>
+    <span class="badge badge-amber" style="margin-bottom:16px;display:inline-block">₹10,000 per confirmed hire</span>
+    <div style="background:#f4f4f0;border-radius:10px;padding:16px;margin:16px 0">
+      <div class="detail-row"><span class="detail-label">School</span><span class="detail-value">${schoolName}</span></div>
+      <div class="detail-row"><span class="detail-label">Contact</span><span class="detail-value">${contactName}</span></div>
+      <div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">${contactEmail}</span></div>
+      <div class="detail-row"><span class="detail-label">Phone</span><span class="detail-value">${contactPhone}</span></div>
+      <div class="detail-row"><span class="detail-label">Role</span><span class="detail-value">${jobTitle}</span></div>
+      <div class="detail-row"><span class="detail-label">Salary range</span><span class="detail-value">${salaryRange}</span></div>
+      ${targetJoinDate ? `<div class="detail-row"><span class="detail-label">Join by</span><span class="detail-value">${targetJoinDate}</span></div>` : ""}
+    </div>
+    <p style="font-weight:600;margin-bottom:4px">Job Description</p>
+    <p style="white-space:pre-wrap;background:#f4f4f0;border-radius:10px;padding:16px;font-size:14px">${jobDescription}</p>
+    <a href="${BASE_URL}/admin" class="btn">Open Admin Dashboard</a>
+  `);
+
+  return deliverEmail({
+    from: FROM,
+    to: adminEmail,
+    subject: `Managed Recruitment Request — ${schoolName} · ${jobTitle}`,
+    html,
+  });
+}
+
+// ── 7. Job Alert Digest (to Teacher) ────────────────────────────────────────
 
 export async function sendJobAlertDigest({
   teacherEmail,

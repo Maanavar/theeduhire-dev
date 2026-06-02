@@ -12,6 +12,7 @@ import { EmptyState, LoadingState } from '@/components/system/system-states';
 import { getApiErrorMessage } from '@/lib/api/client';
 import { getAlerts, createAlert, updateAlert, deleteAlert as apiDeleteAlert } from '@/lib/api/alerts-client';
 import { getProfile, updateProfile } from '@/lib/api/profile-client';
+import { JOB_EXPERIENCE_LEVELS } from '@/config/constants';
 
 import type { JobAlert } from '@/lib/api/alerts-client';
 
@@ -29,6 +30,7 @@ export default function AlertsPage() {
   const [savingWhatsApp, setSavingWhatsApp] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [whatsappOptin, setWhatsappOptin] = useState(false);
+  const [isProTeacher, setIsProTeacher] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -38,6 +40,7 @@ export default function AlertsPage() {
     board: '',
     gradeLevel: '',
     jobType: '',
+    experienceLevel: '',
     salaryMin: '',
     salaryMax: '',
     frequency: 'DAILY_DIGEST',
@@ -50,6 +53,10 @@ export default function AlertsPage() {
         setWhatsappNumber(data.whatsappNumber || '');
         setWhatsappOptin(!!data.whatsappOptin);
       })
+      .catch(() => {});
+    fetch('/api/billing/teacher-plan')
+      .then((res) => res.json())
+      .then((json) => { if (json.success) setIsProTeacher(json.data.plan === 'PRO'); })
       .catch(() => {});
   }, []);
 
@@ -73,6 +80,7 @@ export default function AlertsPage() {
       board: '',
       gradeLevel: '',
       jobType: '',
+      experienceLevel: '',
       salaryMin: '',
       salaryMax: '',
       frequency: 'DAILY_DIGEST',
@@ -96,6 +104,7 @@ export default function AlertsPage() {
     if (formData.board) payload.board = formData.board;
     if (formData.gradeLevel) payload.gradeLevel = formData.gradeLevel;
     if (formData.jobType) payload.jobType = formData.jobType;
+    if (formData.experienceLevel) payload.experienceLevel = formData.experienceLevel;
     if (formData.salaryMin) payload.salaryMin = Number(formData.salaryMin);
     if (formData.salaryMax) payload.salaryMax = Number(formData.salaryMax);
 
@@ -145,6 +154,7 @@ export default function AlertsPage() {
       board: alert.board || '',
       gradeLevel: alert.gradeLevel || '',
       jobType: alert.jobType || '',
+      experienceLevel: (alert as any).experienceLevel || '',
       salaryMin: alert.salaryMin ? String(alert.salaryMin) : '',
       salaryMax: alert.salaryMax ? String(alert.salaryMax) : '',
       frequency: alert.frequency,
@@ -243,6 +253,13 @@ export default function AlertsPage() {
               </select>
             </div>
           </div>
+          <div>
+            <label htmlFor="experienceLevel" className="block text-sm font-medium text-gray-700 mb-1">Experience Level</label>
+            <select id="experienceLevel" value={formData.experienceLevel} onChange={(e) => setFormData((p) => ({ ...p, experienceLevel: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+              <option value="">Any</option>
+              {JOB_EXPERIENCE_LEVELS.map((level) => <option key={level.value} value={level.value}>{level.label}</option>)}
+            </select>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="salaryMin" className="block text-sm font-medium text-gray-700 mb-1">Min Salary (INR)</label>
@@ -255,9 +272,34 @@ export default function AlertsPage() {
           </div>
           <div>
             <label htmlFor="frequency" className="block text-sm font-medium text-gray-700 mb-1">Notification Frequency *</label>
-            <select id="frequency" value={formData.frequency} onChange={(e) => setFormData((p) => ({ ...p, frequency: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-              {FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            <select
+              id="frequency"
+              value={formData.frequency}
+              onChange={(e) => {
+                if (e.target.value === 'IMMEDIATE' && !isProTeacher) return;
+                setFormData((p) => ({ ...p, frequency: e.target.value }));
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            >
+              {FREQUENCIES.map((f) => (
+                <option
+                  key={f.value}
+                  value={f.value}
+                  disabled={f.value === 'IMMEDIATE' && !isProTeacher}
+                >
+                  {f.label}{f.value === 'IMMEDIATE' && !isProTeacher ? ' (Pro only)' : ''}
+                </option>
+              ))}
             </select>
+            {!isProTeacher && (
+              <p className="mt-1.5 text-[12px] text-[var(--eh-text-3)]">
+                Instant (as-posted) alerts require{' '}
+                <a href="/dashboard/subscription" className="font-semibold text-[var(--color-brand-600)] underline underline-offset-2">
+                  Teacher Pro
+                </a>
+                .
+              </p>
+            )}
           </div>
         </div>
       </Modal>
@@ -281,6 +323,7 @@ export default function AlertsPage() {
                       {alert.subject && <Badge className="text-xs">{alert.subject}</Badge>}
                       {alert.city && <Badge className="text-xs">{alert.city}</Badge>}
                       {alert.board && <Badge className="text-xs">{alert.board}</Badge>}
+                      {(alert as any).experienceLevel && <Badge className="text-xs">{JOB_EXPERIENCE_LEVELS.find((l) => l.value === (alert as any).experienceLevel)?.label || (alert as any).experienceLevel}</Badge>}
                       {typeof alert.salaryMin === 'number' && (
                         <Badge className="text-xs">INR {alert.salaryMin}-{alert.salaryMax || alert.salaryMin}</Badge>
                       )}

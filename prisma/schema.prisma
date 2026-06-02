@@ -132,6 +132,36 @@ enum SecurityEventType {
   TWO_FACTOR_BOOTSTRAP
 }
 
+enum SubscriptionPlan {
+  FREE
+  GROWTH
+  PRO
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+}
+
+enum TeacherPlan {
+  FREE
+  PRO
+}
+
+enum ManagedRequestStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
 // ─── User (single auth table for all roles) ──
 
 model User {
@@ -171,6 +201,11 @@ model User {
   notifications Notification[]
   userSessions  UserSession[]
   securityEvents SecurityEvent[]
+  schoolSubscription          SchoolSubscription?
+  teacherSubscription         TeacherSubscription?
+  managedRecruitmentRequests  ManagedRecruitmentRequest[]
+  profileViewsReceived        ProfileView[] @relation("TeacherProfileViews")
+  profileViewsGiven           ProfileView[] @relation("ViewerProfileViews")
 
   @@map("users")
 }
@@ -273,6 +308,10 @@ model SchoolProfile {
   paymentTrackRecord String? @map("payment_track_record")
   workingHours String? @map("working_hours")
   udiseCode  String?  @map("udise_code")
+  isOfflineManaged    Boolean  @default(false) @map("is_offline_managed")
+  offlineContactName  String?  @map("offline_contact_name")
+  offlineContactPhone String?  @map("offline_contact_phone")
+  offlineContactEmail String?  @map("offline_contact_email")
   verified   Boolean  @default(false)
   verificationStatus SchoolVerificationStatus @default(UNVERIFIED) @map("verification_status")
   verificationSubmittedAt DateTime? @map("verification_submitted_at") @db.Timestamptz
@@ -291,6 +330,7 @@ model SchoolProfile {
   @@index([board])
   @@index([verified])
   @@index([verificationStatus])
+  @@index([isOfflineManaged])
   @@map("school_profiles")
 }
 
@@ -498,6 +538,7 @@ model JobAlert {
   jobType        JobType?        @map("job_type")
   salaryMin      Int?            @map("salary_min")
   salaryMax      Int?            @map("salary_max")
+  experienceLevel ExperienceLevel? @map("experience_level")
   frequency      AlertFrequency  @default(DAILY_DIGEST)
   isActive       Boolean         @default(true) @map("is_active")
   createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
@@ -564,8 +605,10 @@ model Interview {
   status        InterviewStatus @default(PENDING)
   schoolNotes   String?         @map("school_notes") @db.Text
   teacherNotes  String?         @map("teacher_notes") @db.Text
-  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+  createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+  dayReminderSentAt      DateTime?       @map("day_reminder_sent_at") @db.Timestamptz
+  hourReminderSentAt     DateTime?       @map("hour_reminder_sent_at") @db.Timestamptz
 
   // Relations
   application   Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
@@ -777,5 +820,92 @@ model BackgroundJob {
 
   @@index([jobType, status, runAt(sort: Asc)])
   @@map("background_jobs")
+}
+
+// ─── Subscription Models ─────────────────────
+
+model SchoolSubscription {
+  id                 String             @id @default(uuid()) @db.Uuid
+  schoolUserId       String             @unique @map("school_user_id") @db.Uuid
+  plan               SubscriptionPlan   @default(FREE)
+  status             SubscriptionStatus @default(ACTIVE)
+  billingCycle       BillingCycle       @default(MONTHLY)
+  currentPeriodStart DateTime           @map("current_period_start") @db.Timestamptz
+  currentPeriodEnd   DateTime           @map("current_period_end") @db.Timestamptz
+  cancelAtPeriodEnd  Boolean            @default(false) @map("cancel_at_period_end")
+  razorpaySubId      String?            @map("razorpay_sub_id")
+  razorpayCustomerId String?            @map("razorpay_customer_id")
+  postsUsedThisCycle Int                @default(0) @map("posts_used_this_cycle")
+  cycleResetAt       DateTime           @map("cycle_reset_at") @db.Timestamptz
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [schoolUserId], references: [id], onDelete: Cascade)
+
+  @@index([schoolUserId])
+  @@map("school_subscriptions")
+}
+
+model TeacherSubscription {
+  id                 String             @id @default(uuid()) @db.Uuid
+  teacherUserId      String             @unique @map("teacher_user_id") @db.Uuid
+  plan               TeacherPlan        @default(FREE)
+  status             SubscriptionStatus @default(ACTIVE)
+  billingCycle       BillingCycle       @default(MONTHLY)
+  currentPeriodStart DateTime           @map("current_period_start") @db.Timestamptz
+  currentPeriodEnd   DateTime           @map("current_period_end") @db.Timestamptz
+  razorpaySubId      String?            @map("razorpay_sub_id")
+  razorpayCustomerId String?            @map("razorpay_customer_id")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [teacherUserId], references: [id], onDelete: Cascade)
+
+  @@index([teacherUserId])
+  @@map("teacher_subscriptions")
+}
+
+model ProfileView {
+  id          String   @id @default(uuid()) @db.Uuid
+  teacherId   String   @map("teacher_id") @db.Uuid
+  viewerId    String?  @map("viewer_id") @db.Uuid
+  viewerRole  String?  @map("viewer_role")
+  viewedAt    DateTime @default(now()) @map("viewed_at") @db.Timestamptz
+
+  teacher  User  @relation("TeacherProfileViews", fields: [teacherId], references: [id], onDelete: Cascade)
+  viewer   User? @relation("ViewerProfileViews", fields: [viewerId], references: [id], onDelete: SetNull)
+
+  @@index([teacherId, viewedAt(sort: Desc)])
+  @@index([viewerId])
+  @@map("profile_views")
+}
+
+model ManagedRecruitmentRequest {
+  id                  String               @id @default(uuid()) @db.Uuid
+  schoolUserId        String?              @map("school_user_id") @db.Uuid
+  status              ManagedRequestStatus @default(PENDING)
+  contactName         String               @map("contact_name")
+  contactEmail        String               @map("contact_email")
+  contactPhone        String               @map("contact_phone")
+  schoolName          String               @map("school_name")
+  jobTitle            String               @map("job_title")
+  jobDescription      String               @map("job_description") @db.Text
+  requirementsText    String?              @map("requirements_text") @db.Text
+  salaryBudgetMin     Int?                 @map("salary_budget_min")
+  salaryBudgetMax     Int?                 @map("salary_budget_max")
+  targetJoinDate      DateTime?            @map("target_join_date") @db.Timestamptz
+  candidatesPresented Int                  @default(0) @map("candidates_presented")
+  confirmedHireAt     DateTime?            @map("confirmed_hire_at") @db.Timestamptz
+  invoiceAmount       Int                  @default(10000) @map("invoice_amount")
+  paidAt              DateTime?            @map("paid_at") @db.Timestamptz
+  adminNotes          String?              @map("admin_notes") @db.Text
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+
+  schoolUser User? @relation(fields: [schoolUserId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([contactEmail])
+  @@map("managed_recruitment_requests")
 }
 

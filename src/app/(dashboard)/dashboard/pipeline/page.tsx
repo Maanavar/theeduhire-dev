@@ -10,6 +10,7 @@ import { trackEvent } from "@/lib/analytics";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { getAllRankedCandidates, getMyJobs, updateApplicationStatus } from "@/lib/api/hiring-client";
 import { useSchoolLiveUpdates } from "@/hooks/use-school-live-updates";
+import { isFeatureEnabled } from "@/config/feature-flags";
 
 type JobOption = { id: string; title: string; status: string };
 type AppCard = {
@@ -50,6 +51,13 @@ function initials(name: string) {
 
 export default function PipelinePage() {
   const router = useRouter();
+
+  useEffect(() => {
+    if (!isFeatureEnabled("pipelineBoard")) {
+      router.replace("/dashboard");
+    }
+  }, [router]);
+
   const [jobs, setJobs] = useState<JobOption[]>([]);
   const [selectedJobId, setSelectedJobId] = useState("");
   const [cards, setCards] = useState<AppCard[]>([]);
@@ -64,7 +72,7 @@ export default function PipelinePage() {
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
 
   const loadCards = useCallback(async (jobId: string) => {
-    const candidates = await getAllRankedCandidates(jobId);
+    const { candidates } = await getAllRankedCandidates(jobId);
     setCards(candidates as AppCard[]);
     setLastSyncedAt(Date.now());
   }, []);

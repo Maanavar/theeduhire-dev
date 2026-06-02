@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { CircleCheckBig, ShieldAlert, ShieldCheck, X } from "lucide-react";
+import { CheckCircle2, Circle, ShieldAlert, ShieldCheck, Star, X } from "lucide-react";
 import { getTeacherApplyReadiness } from "@/lib/profileCompletion";
 import { useDashboardProfile } from "@/components/layout/dashboard-profile-context";
 import { getDashboardSummary } from "@/lib/api/dashboard-client";
@@ -11,13 +11,10 @@ import { getDashboardSummary } from "@/lib/api/dashboard-client";
 type Props = {
   role: "TEACHER" | "SCHOOL_ADMIN";
   teacherCompletion?: number;
+  schoolPlan?: "FREE" | "GROWTH" | "PRO";
 };
 
-function doneClass(done: boolean) {
-  return done ? "text-slate-400 line-through" : "text-slate-700";
-}
-
-export default function OnboardingChecklist({ role, teacherCompletion = 0 }: Props) {
+export default function OnboardingChecklist({ role, teacherCompletion = 0, schoolPlan }: Props) {
   const { data: session } = useSession();
   const profileData = useDashboardProfile();
   const [dismissed, setDismissed] = useState(false);
@@ -93,8 +90,11 @@ export default function OnboardingChecklist({ role, teacherCompletion = 0 }: Pro
         href: "/dashboard/profile",
       },
       { label: "Post your first job", done: jobCount > 0, href: "/dashboard/post-job" },
+      ...(schoolPlan === "FREE"
+        ? [{ label: "Upgrade to Growth or Pro plan", done: false, href: "/dashboard/subscription", upsell: true }]
+        : []),
     ],
-    [profileData, jobCount]
+    [profileData, jobCount, schoolPlan]
   );
 
   const steps = role === "TEACHER" ? teacherSteps : schoolSteps;
@@ -127,84 +127,113 @@ export default function OnboardingChecklist({ role, teacherCompletion = 0 }: Pro
 
   if (!ready || dismissed || hideTeacherChecklist || hideSchoolChecklist) return null;
 
-  const teacherBlockers = teacherReadiness?.blockers || [];
   const verificationStatus = profileData?.verificationStatus || (profileData?.verified ? "VERIFIED" : "UNVERIFIED");
+
+  const doneCount = steps.filter((s) => s.done).length;
+  const progressPct = Math.round((doneCount / Math.max(steps.length, 1)) * 100);
 
   return (
     <section className="rounded-2xl border border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] p-4">
+      {/* Header */}
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-[var(--eh-primary-700)]">Onboarding checklist</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-[var(--eh-primary-700)]">
+            Onboarding checklist
+          </p>
           {role === "TEACHER" ? (
-            <>
-              <p className="mt-1 text-[13px] font-semibold text-[var(--eh-primary-800)]">Application readiness: {teacherCompletion}%</p>
-              <p className="mt-1 text-[13px] text-[var(--eh-primary-700)]">
-                Finish the remaining hiring signals so you can apply without blockers.
-              </p>
-            </>
+            <p className="mt-1 text-[13px] text-[var(--eh-primary-800)]">
+              Application readiness: <strong>{teacherCompletion}%</strong>
+            </p>
           ) : (
-            <>
-              <p className="mt-1 text-[13px] font-semibold text-[var(--eh-primary-800)]">
-                Verification status: {verificationStatus === "VERIFIED" ? "Verified" : verificationStatus === "PENDING" ? "Pending review" : "Action needed"}
-              </p>
-              <p className="mt-1 text-[13px] text-[var(--eh-primary-700)]">
-                Complete the trust setup schools need before posting and reviewing at full speed.
-              </p>
-            </>
+            <p className="mt-1 text-[13px] text-[var(--eh-primary-800)]">
+              Verification:{" "}
+              <strong>
+                {verificationStatus === "VERIFIED"
+                  ? "Verified"
+                  : verificationStatus === "PENDING"
+                    ? "Pending review"
+                    : "Action needed"}
+              </strong>
+            </p>
           )}
         </div>
         <button
           onClick={() => {
-            try {
-              localStorage.setItem(key, "1");
-            } catch {
-              // ignore localStorage issues
-            }
+            try { localStorage.setItem(key, "1"); } catch { /* ignore */ }
             setDismissed(true);
           }}
           className="rounded-md p-1 text-[var(--eh-primary-700)] hover:bg-[var(--eh-primary-100)]"
-          aria-label="Dismiss onboarding checklist"
+          aria-label="Dismiss"
         >
           <X size={14} />
         </button>
       </div>
 
-      {role === "TEACHER" && teacherBlockers.length > 0 ? (
-        <div className="mt-3 rounded-xl border border-[var(--eh-primary-100)] bg-white px-3 py-3">
-          <div className="flex items-start gap-2">
-            <ShieldAlert size={14} className="mt-0.5 text-[var(--eh-primary-700)]" />
-            <div className="space-y-1">
-              {teacherBlockers.slice(0, 3).map((blocker) => (
-                <p key={blocker} className="text-[12.5px] text-[var(--eh-text-2)]">{blocker}</p>
-              ))}
-            </div>
-          </div>
+      {/* Progress bar */}
+      <div className="mt-3">
+        <div className="mb-1.5 flex items-center justify-between">
+          <span className="text-[11px] font-semibold text-[var(--eh-primary-700)]">
+            {doneCount} of {steps.length} complete
+          </span>
+          <span className="text-[11px] font-semibold text-[var(--eh-primary-700)]">{progressPct}%</span>
         </div>
-      ) : null}
-
-      {role === "SCHOOL_ADMIN" ? (
-        <div className="mt-3 rounded-xl border border-[var(--eh-primary-100)] bg-white px-3 py-3">
-          <div className="flex items-start gap-2">
-            {verificationStatus === "VERIFIED" ? <ShieldCheck size={14} className="mt-0.5 text-emerald-600" /> : <CircleCheckBig size={14} className="mt-0.5 text-[var(--eh-primary-700)]" />}
-            <p className="text-[12.5px] text-[var(--eh-text-2)]">
-              {verificationStatus === "PENDING"
-                ? "Your verification request is in review. Keep your school details current while the platform team checks the submission."
-                : verificationStatus === "VERIFIED"
-                ? "Your school is verified. Finish the remaining workflow setup so your hiring pipeline is ready."
-                : "Add your school profile, request verification, and post your first job to unlock the full hiring workflow."}
-            </p>
-          </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-[var(--eh-primary-100)]">
+          <div
+            className="h-full rounded-full bg-[var(--eh-primary-500)] transition-all duration-500"
+            style={{ width: `${progressPct}%` }}
+          />
         </div>
-      ) : null}
+      </div>
 
-      <div className="mt-3 grid gap-2 md:grid-cols-2">
-        {steps.map((step) => (
+      {/* Status note */}
+      {role === "SCHOOL_ADMIN" && (
+        <div className="mt-3 flex items-start gap-2 rounded-xl border border-[var(--eh-primary-100)] bg-white px-3 py-2.5">
+          {verificationStatus === "VERIFIED"
+            ? <ShieldCheck size={13} className="mt-0.5 shrink-0 text-emerald-600" />
+            : <ShieldAlert size={13} className="mt-0.5 shrink-0 text-[var(--eh-primary-700)]" />}
+          <p className="text-[12px] leading-5 text-[var(--eh-text-2)]">
+            {verificationStatus === "PENDING"
+              ? "Verification request is in review. Keep your school details current."
+              : verificationStatus === "VERIFIED"
+                ? "Your school is verified. Complete the remaining steps to start hiring."
+                : "Add your school profile and request verification to unlock the full hiring workflow."}
+          </p>
+        </div>
+      )}
+
+      {/* Steps */}
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {(steps as (typeof steps[number] & { upsell?: boolean })[]).map((step) => (
           <Link
             key={step.label}
             href={step.href}
-            className="rounded-xl border border-[var(--eh-primary-100)] bg-white px-3 py-2 text-[13px] transition-colors hover:border-[var(--eh-primary-200)] hover:bg-[var(--eh-primary-50)]"
+            className={[
+              "group flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-[13px] transition-colors",
+              step.done
+                ? "border-emerald-100 bg-white"
+                : step.upsell
+                  ? "border-amber-200 bg-amber-50 hover:border-amber-300"
+                  : "border-[var(--eh-primary-100)] bg-white hover:border-[var(--eh-primary-200)] hover:bg-[var(--eh-primary-50)]",
+            ].join(" ")}
           >
-            <span className={doneClass(step.done)}>{step.label}</span>
+            {step.done ? (
+              <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
+            ) : step.upsell ? (
+              <Star size={14} className="shrink-0 text-amber-500" />
+            ) : (
+              <Circle size={14} className="shrink-0 text-[var(--eh-primary-300)]" />
+            )}
+            <span
+              className={
+                step.done
+                  ? "text-slate-400 line-through"
+                  : step.upsell
+                    ? "font-semibold text-amber-800"
+                    : "text-slate-700"
+              }
+            >
+              {step.label}
+            </span>
           </Link>
         ))}
       </div>

@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { isTeacherFeatured } from "@/lib/subscription";
 
 const createAlertSchema = z.object({
   name: z.string().min(1, "Alert name required"),
@@ -14,6 +15,7 @@ const createAlertSchema = z.object({
   board: z.enum(["CBSE", "ICSE", "STATE_BOARD", "IB", "CAMBRIDGE", "OTHER"]).optional(),
   gradeLevel: z.string().optional(),
   jobType: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT", "VISITING_FACULTY"]).optional(),
+  experienceLevel: z.enum(["FRESHER", "ONE_TO_TWO_YEARS", "TWO_TO_FIVE_YEARS", "FIVE_TO_TEN_YEARS", "TEN_PLUS_YEARS"]).optional(),
   salaryMin: z.number().int().positive().optional(),
   salaryMax: z.number().int().positive().optional(),
   frequency: z.enum(["IMMEDIATE", "DAILY_DIGEST", "WEEKLY_DIGEST"]).default("DAILY_DIGEST"),
@@ -44,6 +46,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // IMMEDIATE alerts require Teacher Pro plan
+    let frequency = parsed.data.frequency;
+    if (frequency === "IMMEDIATE") {
+      const pro = await isTeacherFeatured(auth.user.id);
+      if (!pro) {
+        return NextResponse.json(
+          { success: false, error: "PLAN_UPGRADE_REQUIRED", message: "Instant (as-posted) alerts require the Teacher Pro plan. Upgrade at /dashboard/subscription." },
+          { status: 403 }
+        );
+      }
+    }
+
     const alert = await prisma.jobAlert.create({
       data: {
         userId: auth.user.id,
@@ -53,9 +67,10 @@ export async function POST(req: NextRequest) {
         board: parsed.data.board as any || null,
         gradeLevel: parsed.data.gradeLevel || null,
         jobType: parsed.data.jobType as any || null,
+        experienceLevel: parsed.data.experienceLevel as any || null,
         salaryMin: parsed.data.salaryMin || null,
         salaryMax: parsed.data.salaryMax || null,
-        frequency: parsed.data.frequency as any,
+        frequency: frequency as any,
         isActive: true,
       },
     });

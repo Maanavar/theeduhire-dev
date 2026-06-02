@@ -23,7 +23,7 @@ function buildContentSecurityPolicy() {
     "form-action 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${posthogOrigins.apiOrigin} ${posthogOrigins.assetOrigin}`,
+    `script-src 'self' 'unsafe-inline' ${isProduction ? "" : "'unsafe-eval'"} ${posthogOrigins.apiOrigin} ${posthogOrigins.assetOrigin}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://*.supabase.co https://ui-avatars.com",
     "font-src 'self' data:",

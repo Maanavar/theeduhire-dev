@@ -181,8 +181,8 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ success: true, data: { ...profile, ...user } });
     }
 
-    // Teacher profile — use Zod validation
-    const parsed = teacherProfileSchema.safeParse(body);
+    // Teacher profile — partial patch: only validate/apply fields present in request body
+    const parsed = teacherProfileSchema.partial().safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { success: false, error: parsed.error.flatten().fieldErrors },
