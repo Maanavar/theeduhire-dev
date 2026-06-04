@@ -149,7 +149,7 @@ async function main() {
         },
       });
 
-      const profile = await prisma.teacherProfile.create({
+      await prisma.teacherProfile.create({
         data: {
           userId: user.id,
           qualification: teacher.qualification,

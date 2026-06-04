@@ -10,7 +10,7 @@ import { computeMatchScore } from "@/lib/ai-match";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { JOB_POST_RATE_LIMIT_WINDOW_MS, JOB_POST_USER_LIMIT } from "@/config/constants";
 import { getStoredMatchScores } from "@/lib/match-score-read-model";
-import { canManageJob } from "@/lib/policies/job-policy";
+import { canManageJob, canViewJobWithModeration } from "@/lib/policies/job-policy";
 import { getSchoolProfileIdForUser } from "@/lib/policies/application-policy";
 
 export async function GET(
@@ -74,7 +74,7 @@ export async function GET(
         },
         screeningQuestions: {
           orderBy: { sortOrder: "asc" },
-          select: { id: true, question: true, required: true, sortOrder: true },
+          select: { id: true, question: true, questionType: true, options: true, required: true, sortOrder: true },
         },
         _count: {
           select: { applications: true },
@@ -88,9 +88,7 @@ export async function GET(
         { status: 404 }
       );
     }
-    const canBypassModeration = session?.user?.role === "ADMIN" || session?.user?.role === "SCHOOL_ADMIN";
-    const schoolSuspended = job.school.user.isSuspended && !job.school.isOfflineManaged;
-    if ((job.isHidden || schoolSuspended) && !canBypassModeration) {
+    if (!canViewJobWithModeration(job, session?.user)) {
       return NextResponse.json(
         { success: false, error: "Job not found" },
         { status: 404 }
@@ -277,9 +275,11 @@ export async function PUT(
         await tx.screeningQuestion.deleteMany({ where: { jobId: id } });
         if (screeningQuestions.length > 0) {
           await tx.screeningQuestion.createMany({
-            data: screeningQuestions.map((item: { question: string; required?: boolean; sortOrder?: number }, i: number) => ({
+            data: screeningQuestions.map((item: { question: string; questionType?: string; options?: string[]; required?: boolean; sortOrder?: number }, i: number) => ({
               jobId: id,
               question: sanitizePlainText(item.question),
+              questionType: item.questionType || "text",
+              options: Array.isArray(item.options) ? item.options : [],
               required: item.required ?? false,
               sortOrder: item.sortOrder ?? i,
             })),

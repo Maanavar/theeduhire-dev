@@ -9,7 +9,6 @@ export const featureFlags = {
   messaging: readBooleanFlag(process.env.NEXT_PUBLIC_FF_MESSAGING),
   notificationsCenter: readBooleanFlag(process.env.NEXT_PUBLIC_FF_NOTIFICATIONS_CENTER),
   settingsSecurity: readBooleanFlag(process.env.NEXT_PUBLIC_FF_SETTINGS_SECURITY),
-  twoFactorAuth: readBooleanFlag(process.env.NEXT_PUBLIC_FF_2FA),
   schoolLiveUpdates: readBooleanFlag(
     process.env.NEXT_PUBLIC_FF_SCHOOL_LIVE_UPDATES,
     true

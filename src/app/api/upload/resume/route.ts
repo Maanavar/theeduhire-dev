@@ -10,7 +10,7 @@ import { requireAuth } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase";
 import { prisma } from "@/lib/prisma";
 import { ALLOWED_RESUME_TYPES, MAX_RESUME_SIZE, RESUME_BUCKET } from "@/config/constants";
-import { createStorageObjectRef, ensureBucket, getResumeAccessPath } from "@/lib/storage";
+import { createStorageObjectRef, ensureBucket, fileBufferMatchesAllowedContent, getResumeAccessPath } from "@/lib/storage";
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,6 +45,12 @@ export async function POST(req: NextRequest) {
     const ext = file.name.split(".").pop() || "pdf";
     const storagePath = `${auth.user.id}/${Date.now()}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
+    if (!fileBufferMatchesAllowedContent(buffer, file.name, "document", file.type)) {
+      return NextResponse.json(
+        { success: false, error: "File content does not match the selected document type" },
+        { status: 400 }
+      );
+    }
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from(RESUME_BUCKET)

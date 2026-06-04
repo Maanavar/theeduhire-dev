@@ -257,9 +257,11 @@ export async function POST(req: NextRequest) {
       }
       if (screeningQuestions?.length) {
         await tx.screeningQuestion.createMany({
-          data: screeningQuestions.map((item: { question: string; required?: boolean; sortOrder?: number }, i: number) => ({
+          data: screeningQuestions.map((item: { question: string; questionType?: string; options?: string[]; required?: boolean; sortOrder?: number }, i: number) => ({
             jobId: created.id,
             question: sanitizePlainText(item.question),
+            questionType: item.questionType || "text",
+            options: Array.isArray(item.options) ? item.options : [],
             required: item.required ?? false,
             sortOrder: item.sortOrder ?? i,
           })),

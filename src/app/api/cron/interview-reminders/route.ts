@@ -2,17 +2,11 @@
 // Send day-of (morning) and 1-hour-before in-app notifications for upcoming interviews.
 // Deduplicates by tracking sentAt columns on the Interview row.
 // Call this endpoint every 30-60 minutes from a cron (Vercel Cron / external scheduler).
-// Secured with CRON_SECRET header.
+// Secured with CRON_SECRET.
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-const CRON_SECRET = process.env.CRON_SECRET;
-
-function isCronAuthorized(req: NextRequest): boolean {
-  if (!CRON_SECRET) return false; // refuse all requests when secret is not configured
-  return req.headers.get("x-cron-secret") === CRON_SECRET;
-}
+import { isCronAuthorized } from "@/lib/cron-auth";
 
 function formatTime(date: Date): string {
   return date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });

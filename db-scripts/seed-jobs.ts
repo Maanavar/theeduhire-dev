@@ -1,8 +1,10 @@
-import { PrismaClient, Board, JobType, JobStatus } from "@prisma/client";
+import { PrismaClient, JobType, JobStatus } from "@prisma/client";
+import { assertDestructiveDbScriptAllowed } from "../scripts/lib/script-safety";
 
 const prisma = new PrismaClient();
 
 async function main() {
+  assertDestructiveDbScriptAllowed("db-scripts/seed-jobs.ts");
   console.log("🌱 Seeding job postings only...");
 
   await prisma.jobBenefit.deleteMany();

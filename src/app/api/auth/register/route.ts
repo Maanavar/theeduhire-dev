@@ -17,11 +17,12 @@ import {
 import { publishDomainEvent } from "@/lib/domain-events";
 import { AUTH_RATE_LIMIT_WINDOW_MS, AUTH_REGISTER_IP_LIMIT } from "@/config/constants";
 import { sanitizePlainText } from "@/lib/sanitize";
+import { validatePasswordStrength } from "@/lib/security";
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(100),
   email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters").max(100),
+  password: z.string().min(1, "Password is required").max(256, "Password must be 256 characters or fewer"),
   role: z.enum(["TEACHER", "SCHOOL_ADMIN"]),
   phone: z.string().trim().max(30).optional(),
   teacherProfile: z
@@ -98,6 +99,10 @@ export async function POST(req: NextRequest) {
     const { name: rawName, email, password, role, phone, teacherProfile, schoolProfile } = parsed.data;
     const name = sanitizePlainText(rawName);
     const normalizedEmail = email.toLowerCase().trim();
+    const passwordError = validatePasswordStrength(password, { email: normalizedEmail, name });
+    if (passwordError) {
+      return NextResponse.json({ success: false, error: passwordError }, { status: 400 });
+    }
     const requestHash = stableHash({
       name,
       email: normalizedEmail,

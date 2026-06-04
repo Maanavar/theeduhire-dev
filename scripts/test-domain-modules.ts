@@ -1,4 +1,4 @@
-import puppeteer from "puppeteer";
+import { launchScriptBrowser } from "./lib/browser";
 import { ensureSmokeData } from "./lib/smoke-data";
 
 type CheckResult = { name: string; passed: boolean; details: string };
@@ -12,7 +12,7 @@ async function run() {
   const teacherEmail = process.env.TEST_TEACHER_EMAIL || smoke.teacher.email;
   const teacherPassword = process.env.TEST_TEACHER_PASSWORD || smoke.teacher.password;
 
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await launchScriptBrowser({ headless: true });
   const page = await browser.newPage();
   page.setDefaultTimeout(TIMEOUT_MS);
 

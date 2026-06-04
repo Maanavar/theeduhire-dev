@@ -30,6 +30,65 @@ export function fileMatchesAllowedTypes(file: File, allowedTypes: readonly strin
   return extension ? allowedExtensions.includes(extension) : false;
 }
 
+type UploadContentKind = "document" | "image" | "demo-video";
+
+function hasMagic(buffer: Buffer, magic: number[], offset = 0) {
+  if (buffer.length < offset + magic.length) return false;
+  return magic.every((byte, index) => buffer[offset + index] === byte);
+}
+
+function hasAscii(buffer: Buffer, value: string, offset: number) {
+  if (buffer.length < offset + value.length) return false;
+  return buffer.toString("ascii", offset, offset + value.length) === value;
+}
+
+function isZip(buffer: Buffer) {
+  return (
+    hasMagic(buffer, [0x50, 0x4b, 0x03, 0x04]) ||
+    hasMagic(buffer, [0x50, 0x4b, 0x05, 0x06]) ||
+    hasMagic(buffer, [0x50, 0x4b, 0x07, 0x08])
+  );
+}
+
+export function fileBufferMatchesAllowedContent(
+  buffer: Buffer,
+  fileName: string,
+  kind: UploadContentKind,
+  contentType = ""
+) {
+  const extension =
+    getFileExtension(fileName) ||
+    ({
+      "application/pdf": "pdf",
+      "application/msword": "doc",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "video/mp4": "mp4",
+      "video/quicktime": "mov",
+      "video/webm": "webm",
+    }[contentType] ?? "");
+
+  if (kind === "document") {
+    if (extension === "pdf") return hasMagic(buffer, [0x25, 0x50, 0x44, 0x46]);
+    if (extension === "doc") return hasMagic(buffer, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+    if (extension === "docx") return isZip(buffer);
+    return false;
+  }
+
+  if (kind === "image") {
+    if (extension === "jpg" || extension === "jpeg") return hasMagic(buffer, [0xff, 0xd8, 0xff]);
+    if (extension === "png") return hasMagic(buffer, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    if (extension === "webp") return hasAscii(buffer, "RIFF", 0) && hasAscii(buffer, "WEBP", 8);
+    return false;
+  }
+
+  if (extension === "webm") return hasMagic(buffer, [0x1a, 0x45, 0xdf, 0xa3]);
+  if (extension === "mp4" || extension === "mov") return hasAscii(buffer, "ftyp", 4);
+  return false;
+}
+
 export async function ensureBucket(bucket: string, visibility: BucketVisibility, fileSizeLimit = "100MB") {
   const { data: existing, error: lookupError } = await supabaseAdmin.storage.getBucket(bucket);
   const isPublic = visibility === "public";

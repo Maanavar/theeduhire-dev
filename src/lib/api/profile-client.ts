@@ -116,7 +116,7 @@ export function updateExperience(id: string, input: ExperienceInput) {
 }
 
 export function deleteExperience(id: string) {
-  return apiRequest<{}>(
+  return apiRequest<Record<string, never>>(
     `/api/profile/experience/${id}`,
     { method: "DELETE" },
     "Failed to delete experience"
@@ -148,7 +148,7 @@ export function updateCertification(id: string, input: CertificationInput) {
 }
 
 export function deleteCertification(id: string) {
-  return apiRequest<{}>(
+  return apiRequest<Record<string, never>>(
     `/api/profile/certifications/${id}`,
     { method: "DELETE" },
     "Failed to delete certification"
@@ -156,7 +156,7 @@ export function deleteCertification(id: string) {
 }
 
 export function deleteResume(id: string) {
-  return apiRequest<{}>(
+  return apiRequest<Record<string, never>>(
     `/api/resumes/${id}`,
     { method: "DELETE" },
     "Failed to delete resume"

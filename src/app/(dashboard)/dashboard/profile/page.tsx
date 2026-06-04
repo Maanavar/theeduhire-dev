@@ -5,9 +5,11 @@ import { useSession } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  Eye,
   Save,
   Loader2,
 } from "lucide-react";
+import Link from "next/link";
 import { toast } from "@/components/ui/toast";
 import { BOARDS, LOCATIONS } from "@/config/constants";
 import { calculateProfileCompletion } from "@/lib/profileCompletion";
@@ -39,7 +41,7 @@ import { PageHeader, PageShell, Panel, StatusBadge } from "@/components/layout/p
 import { ProfileHeaderCard as SharedProfileHeaderCard } from "@/components/profile/profile-header-card";
 import { ExperienceModal as ExtractedExperienceModal } from "@/components/profile/experience-modal";
 import { CertificationModal as ExtractedCertificationModal } from "@/components/profile/certification-modal";
-import { getSchoolProfileSections, getTeacherProfileSections } from "@/components/profile/profile-sections";
+import { getTeacherProfileSections } from "@/components/profile/profile-sections";
 import {
   TeacherBasicInfoSection,
   TeacherCredentialsSection,
@@ -132,21 +134,8 @@ export default function ProfilePage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [requestingVerification, setRequestingVerification] = useState(false);
   const [activeSection, setActiveSection] = useState("basic-info");
-  const [schoolActiveSection, setSchoolActiveSection] = useState("school-information");
+
   const schoolLogoInputRef = useRef<HTMLInputElement>(null);
-  const schoolCompletion = (() => {
-    const checks = [
-      !!schoolForm.name?.trim(),
-      !!schoolForm.schoolName?.trim(),
-      !!schoolForm.city?.trim(),
-      !!schoolForm.board?.trim(),
-      !!schoolForm.address?.trim(),
-      !!schoolForm.website?.trim(),
-      !!schoolForm.about?.trim(),
-      !!profileData?.logoUrl,
-    ];
-    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
-  })();
 
   // Form for teacher profile (basic + specializations)
   const form = useForm<TeacherProfileInput>({
@@ -453,9 +442,6 @@ export default function ProfilePage() {
       setSchoolForm((prev) => ({ ...prev, [key]: value }));
     };
 
-    const schoolSections = getSchoolProfileSections(schoolForm);
-    const activeSchoolSectionMeta = schoolSections.find((section) => section.id === schoolActiveSection) || schoolSections[0];
-
     const saveSchoolPatch = async (patch: Record<string, any>, successMessage: string) => {
       setSchoolSaving(true);
 
@@ -492,34 +478,25 @@ export default function ProfilePage() {
     };
 
     const handleSchoolSectionSave = async () => {
-      if (schoolActiveSection === "school-information") {
-        if (!schoolForm.schoolName.trim() || !schoolForm.city || !schoolForm.board) {
-          toast.error("School name, city, and board are required in this section.");
-          return;
-        }
-        await saveSchoolPatch(
-          {
-            name: schoolForm.name,
-            schoolName: schoolForm.schoolName,
-            city: schoolForm.city,
-            board: schoolForm.board,
-            address: schoolForm.address || undefined,
-            website: schoolForm.website || undefined,
-            about: schoolForm.about || undefined,
-          },
-          "School Information saved"
-        );
+      if (!schoolForm.schoolName.trim() || !schoolForm.city || !schoolForm.board) {
+        toast.error("School name, city, and board are required.");
         return;
       }
-
       await saveSchoolPatch(
         {
+          name: schoolForm.name,
+          schoolName: schoolForm.schoolName,
+          city: schoolForm.city,
+          board: schoolForm.board,
+          address: schoolForm.address || undefined,
+          website: schoolForm.website || undefined,
+          about: schoolForm.about || undefined,
           hasPfEsi: schoolForm.hasPfEsi,
           paymentTrackRecord: schoolForm.paymentTrackRecord || undefined,
           workingHours: schoolForm.workingHours || undefined,
           udiseCode: schoolForm.udiseCode || undefined,
         },
-        "Trust & Compliance saved"
+        "School profile saved"
       );
     };
 
@@ -543,361 +520,315 @@ export default function ProfilePage() {
       }
     };
 
-    const submitVerificationRequest = async () => {
-      setRequestingVerification(true);
-      try {
-        const data = await requestSchoolVerification();
-        setProfileData((prev) => (
-          prev
-            ? {
-                ...prev,
-                verificationStatus: data.verificationStatus,
-                verified: data.verified,
-              }
-            : prev
-        ));
-        toast.success("Verification request submitted");
-      } catch (error) {
-        toast.error(getApiErrorMessage(error, "Failed to request verification"));
-      } finally {
-        setRequestingVerification(false);
-      }
-    };
+    const completenessItems = [
+      { label: "Basic Information", done: !!schoolForm.schoolName && !!schoolForm.city && !!schoolForm.board },
+      { label: "Academic & Operational Details", done: !!schoolForm.workingHours && !!schoolForm.udiseCode },
+      { label: "Trust & Compliance", done: !!schoolForm.udiseCode },
+      { label: "Upload Banner Image", done: false },
+    ];
+    const completenessScore = Math.round((completenessItems.filter((i) => i.done).length / completenessItems.length) * 100);
 
     return (
       <PageShell>
         <PageHeader
-          title="School Profile"
-          subtitle="Update your school's information for job listings."
+          title="Edit School Profile"
+          subtitle="Update your school information, credentials, and profile details."
         />
 
-        <Panel className="mb-5 p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 font-display">{schoolForm.schoolName || "School profile"}</h2>
-              <p className="mt-1 text-xs text-gray-500">
-                {verificationStatus === "VERIFIED"
-                  ? "Verified school profile"
-                  : verificationStatus === "PENDING"
-                    ? "Verification under review"
-                    : "Unverified school profile"}
-              </p>
-            </div>
-            <StatusBadge tone={verificationStatus === "VERIFIED" ? "success" : verificationStatus === "PENDING" ? "neutral" : "warning"}>
-              {verificationStatus === "VERIFIED" ? "Verified" : verificationStatus === "PENDING" ? "Pending" : "Unverified"}
-            </StatusBadge>
-          </div>
-          <div className="mt-4">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-500">Profile completion</span>
-              <span className="text-xs font-bold text-brand-600">{schoolCompletion}%</span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
-              <div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${schoolCompletion}%` }} />
-            </div>
-          </div>
-        </Panel>
-
-        <Panel className="mb-5 p-5">
-          {verificationStatus === "VERIFIED" ? (
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-emerald-700 text-sm font-medium">
-              Verified School ✓ Your profile has passed verification.
-            </div>
-          ) : verificationStatus === "PENDING" ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-slate-700 text-sm font-medium">
-              Verification under review (2-3 business days).
-            </div>
-          ) : (
-            <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
-              <p className="text-sm font-medium text-amber-800">
-                Complete your profile to apply for verification.
-              </p>
-              <button
-                type="button"
-                onClick={submitVerificationRequest}
-                disabled={requestingVerification}
-                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
-              >
-                {requestingVerification ? <Loader2 size={12} className="animate-spin" /> : null}
-                Submit for review
-              </button>
-            </div>
-          )}
-        </Panel>
-
-        <div className="mb-6 overflow-x-auto">
-          <div className="inline-flex min-w-full gap-2 rounded-2xl border border-[var(--eh-border)] bg-white p-2">
-            {schoolSections.map((section) => (
-              <button
-                key={section.id}
-                type="button"
-                onClick={() => setSchoolActiveSection(section.id)}
-                className={cn(
-                  "rounded-xl px-4 py-2 text-[12px] font-semibold transition-colors whitespace-nowrap",
-                  schoolActiveSection === section.id
-                    ? "bg-brand-500 text-white shadow-brand"
-                    : section.done
-                      ? "bg-brand-50 text-brand-700"
-                      : "text-[var(--eh-text-2)] hover:bg-[var(--surface-base)]"
-                )}
-              >
-                {section.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void handleSchoolSectionSave();
-          }}
-          className="space-y-5"
-        >
-          <div className="rounded-2xl border border-[var(--eh-border)] bg-[var(--surface-base)] px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">Current section</p>
-            <h2 className="mt-1 text-[18px] font-semibold text-[var(--eh-text)]">{activeSchoolSectionMeta.label}</h2>
-            <p className="mt-1 text-[13px] text-[var(--eh-text-3)]">{activeSchoolSectionMeta.description}</p>
-          </div>
-
-          {/* Basic Info */}
-          {schoolActiveSection === "school-information" && (
-          <div className="card p-6">
-            <div className="flex items-center gap-2 pb-3 mb-4 border-b border-black/[0.05]">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-[0.07em]">
-                School Information
-              </h2>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">School Logo</label>
-                <input
-                  ref={schoolLogoInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  onChange={handleSchoolLogoUpload}
-                  disabled={logoUploading}
-                />
-                <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center text-xs text-gray-400">
-                    {profileData?.logoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={profileData.logoUrl} alt="School logo" className="h-full w-full object-cover" />
-                    ) : (
-                      "No logo"
-                    )}
+        <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+          {/* Left: Main form */}
+          <form
+            onSubmit={(e) => { e.preventDefault(); void handleSchoolSectionSave(); }}
+            className="space-y-5"
+          >
+            {/* Basic Information */}
+            <Panel className="p-6">
+              <h3 className="text-[15px] font-semibold text-[var(--eh-text)] mb-5">Basic Information</h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="eh-label">School Name *</label>
+                    <input type="text" value={schoolForm.schoolName} onChange={(e) => handleSchoolChange("schoolName", e.target.value)} className="input-base" placeholder="Green Valley School" required />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => schoolLogoInputRef.current?.click()}
-                    disabled={logoUploading}
-                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                  >
-                    {logoUploading ? <Loader2 size={12} className="animate-spin" /> : null}
-                    {profileData?.logoUrl ? "Replace logo" : "Upload logo"}
+                  <div>
+                    <label className="eh-label">Admin Name *</label>
+                    <input type="text" value={schoolForm.name} onChange={(e) => handleSchoolChange("name", e.target.value)} className="input-base" placeholder="Ramesh B" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="eh-label">City *</label>
+                    <select value={schoolForm.city} onChange={(e) => handleSchoolChange("city", e.target.value)} className="input-base" required>
+                      <option value="">Select city</option>
+                      {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="eh-label">Board *</label>
+                    <select value={schoolForm.board} onChange={(e) => handleSchoolChange("board", e.target.value)} className="input-base" required>
+                      <option value="">Select board</option>
+                      {BOARDS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="eh-label">Address *</label>
+                    <input type="text" value={schoolForm.address} onChange={(e) => handleSchoolChange("address", e.target.value)} className="input-base" placeholder="No. 15, Avinashi Road, Coimbatore" />
+                  </div>
+                  <div>
+                    <label className="eh-label">Website</label>
+                    <input type="url" value={schoolForm.website} onChange={(e) => handleSchoolChange("website", e.target.value)} className="input-base" placeholder="https://yourschool.edu.in" />
+                  </div>
+                </div>
+                <div>
+                  <label className="eh-label">About School *</label>
+                  <textarea value={schoolForm.about} onChange={(e) => handleSchoolChange("about", e.target.value)} className="input-base min-h-[110px] resize-y" placeholder="Tell teachers about your school's vision, values, and culture..." maxLength={500} />
+                  <p className="mt-1 text-right text-[11px] text-[var(--eh-text-4)]">{schoolForm.about.length} / 500</p>
+                </div>
+              </div>
+            </Panel>
+
+            {/* Academic & Operational Details */}
+            <Panel className="p-6">
+              <h3 className="text-[15px] font-semibold text-[var(--eh-text)] mb-5">Academic & Operational Details</h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div>
+                  <label className="eh-label">Working Hours *</label>
+                  <input type="text" value={schoolForm.workingHours} onChange={(e) => handleSchoolChange("workingHours", e.target.value)} className="input-base" placeholder="8:00 AM – 4:00 PM" />
+                </div>
+                <div>
+                  <label className="eh-label">Grade Levels <span className="ml-1 text-[10px] font-normal text-[var(--eh-text-4)]">(coming soon)</span></label>
+                  <select disabled className="input-base opacity-50 cursor-not-allowed">
+                    <option>Pre-KG to Grade 12</option>
+                    <option>Grade 1 to Grade 10</option>
+                    <option>Grade 6 to Grade 12</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="eh-label">Medium of Instruction <span className="ml-1 text-[10px] font-normal text-[var(--eh-text-4)]">(coming soon)</span></label>
+                  <select disabled className="input-base opacity-50 cursor-not-allowed">
+                    <option>English</option>
+                    <option>Tamil</option>
+                    <option>Hindi</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="eh-label">School Type <span className="ml-1 text-[10px] font-normal text-[var(--eh-text-4)]">(coming soon)</span></label>
+                  <select disabled className="input-base opacity-50 cursor-not-allowed">
+                    <option>Co-educational</option>
+                    <option>Boys only</option>
+                    <option>Girls only</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="eh-label">Student Strength <span className="ml-1 text-[10px] font-normal text-[var(--eh-text-4)]">(coming soon)</span></label>
+                  <input type="number" disabled className="input-base opacity-50 cursor-not-allowed" placeholder="1,250" min={0} />
+                </div>
+                <div>
+                  <label className="eh-label">Teacher Count <span className="ml-1 text-[10px] font-normal text-[var(--eh-text-4)]">(coming soon)</span></label>
+                  <input type="number" disabled className="input-base opacity-50 cursor-not-allowed" placeholder="78" min={0} />
+                </div>
+                <div>
+                  <label className="eh-label">UDISE Code *</label>
+                  <input type="text" value={schoolForm.udiseCode} onChange={(e) => handleSchoolChange("udiseCode", e.target.value)} className="input-base" placeholder="33301234567" />
+                </div>
+              </div>
+            </Panel>
+
+            {/* Trust & Compliance */}
+            <Panel className="p-6">
+              <h3 className="text-[15px] font-semibold text-[var(--eh-text)] mb-5">Trust & Compliance</h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex items-center justify-between rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] px-4 py-3">
+                  <div>
+                    <p className="text-[13px] font-semibold text-[var(--eh-text)]">PF/ESI Compliance</p>
+                    <p className="text-[11px] text-emerald-600 font-medium">Compliant</p>
+                  </div>
+                  <input type="checkbox" checked={schoolForm.hasPfEsi} onChange={(e) => handleSchoolChange("hasPfEsi", e.target.checked)} className="h-4 w-4 rounded" />
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] px-4 py-3">
+                  <div>
+                    <p className="text-[13px] font-semibold text-[var(--eh-text)]">Payment Track Record</p>
+                    <p className="text-[11px] text-emerald-600 font-medium">On-time Payments</p>
+                  </div>
+                  <input type="checkbox" checked={schoolForm.paymentTrackRecord === "ON_TIME"} onChange={(e) => handleSchoolChange("paymentTrackRecord", e.target.checked ? "ON_TIME" : "")} className="h-4 w-4 rounded" />
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] px-4 py-3">
+                  <div>
+                    <p className="text-[13px] font-semibold text-[var(--eh-text)]">Child Safety / POCSO</p>
+                    <p className="text-[11px] text-emerald-600 font-medium">Committed</p>
+                  </div>
+                  <input type="checkbox" defaultChecked className="h-4 w-4 rounded" />
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] px-4 py-3">
+                  <div>
+                    <p className="text-[13px] font-semibold text-[var(--eh-text)]">Hiring Support Available</p>
+                    <p className="text-[11px] text-emerald-600 font-medium">Yes</p>
+                  </div>
+                  <input type="checkbox" defaultChecked className="h-4 w-4 rounded" />
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="eh-label">PF Number</label>
+                  <input type="text" className="input-base" placeholder="PF/COIM/2024/1187" />
+                </div>
+                <div>
+                  <label className="eh-label">Last Reviewed On</label>
+                  <input type="date" className="input-base" />
+                </div>
+                <div>
+                  <label className="eh-label">Policy Document</label>
+                  <button type="button" className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[var(--eh-border)] px-4 py-3 text-[13px] text-[var(--eh-text-3)] hover:bg-[var(--surface-base)]">
+                    ↑ Upload Document
                   </button>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Account Name
-                </label>
-                <input
-                  type="text"
-                  value={schoolForm.name}
-                  onChange={(e) => handleSchoolChange("name", e.target.value)}
-                  className="input-base"
-                  placeholder="Your name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  School Name *
-                </label>
-                <input
-                  type="text"
-                  value={schoolForm.schoolName}
-                  onChange={(e) => handleSchoolChange("schoolName", e.target.value)}
-                  className="input-base"
-                  placeholder="Your school name"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    City *
-                  </label>
-                  <select
-                    value={schoolForm.city}
-                    onChange={(e) => handleSchoolChange("city", e.target.value)}
-                    className="input-base appearance-none"
-                    required
-                  >
-                    <option value="">Select city</option>
-                    {LOCATIONS.map((l) => (
-                      <option key={l} value={l}>
-                        {l}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    Board *
-                  </label>
-                  <select
-                    value={schoolForm.board}
-                    onChange={(e) => handleSchoolChange("board", e.target.value)}
-                    className="input-base appearance-none"
-                    required
-                  >
-                    <option value="">Select board</option>
-                    {BOARDS.map((b) => (
-                      <option key={b.value} value={b.value}>
-                        {b.label}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="eh-label">Support Contact Email</label>
+                  <input type="email" className="input-base" placeholder="careers@yourschool.in" />
                 </div>
               </div>
+            </Panel>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Address
-                </label>
-                <input
-                  type="text"
-                  value={schoolForm.address}
-                  onChange={(e) => handleSchoolChange("address", e.target.value)}
-                  className="input-base"
-                  placeholder="School address"
-                />
-              </div>
+            {/* Footer actions */}
+            <div className="flex items-center justify-between">
+              <button type="button" className="eh-btn eh-btn-secondary">Cancel</button>
+              <button type="submit" disabled={schoolSaving} className="eh-btn eh-btn-primary">
+                {schoolSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Save Changes
+              </button>
+            </div>
+          </form>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Website
-                </label>
-                <input
-                  type="url"
-                  value={schoolForm.website}
-                  onChange={(e) => handleSchoolChange("website", e.target.value)}
-                  className="input-base"
-                  placeholder="https://yourschool.edu.in"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  About Your School
-                </label>
-                <textarea
-                  value={schoolForm.about}
-                  onChange={(e) => handleSchoolChange("about", e.target.value)}
-                  className="input-base min-h-[100px] resize-vertical"
-                  placeholder="Tell teachers about your school, its vision, and why they should join..."
-                  maxLength={2000}
-                />
-                <p className="text-xs text-gray-400 mt-1">{schoolForm.about.length}/2000</p>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => void handleSchoolSectionSave()}
-                  disabled={schoolSaving}
-                  className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-brand transition-colors hover:bg-brand-600 disabled:opacity-60"
-                >
-                  {schoolSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                  Save School Information
+          {/* Right sidebar */}
+          <aside className="flex flex-col gap-4 xl:sticky xl:top-24 self-start">
+            {/* School Logo */}
+            <Panel className="p-5">
+              <label className="eh-label mb-3 block">School Logo *</label>
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border-2 border-[var(--eh-border)] bg-[var(--surface-base)]">
+                  {profileData?.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={profileData.logoUrl} alt="School logo" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-[28px] font-bold text-[var(--eh-primary-600)]">{schoolForm.schoolName?.charAt(0) || "S"}</span>
+                  )}
+                </div>
+                <input ref={schoolLogoInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleSchoolLogoUpload} disabled={logoUploading} />
+                <button type="button" onClick={() => schoolLogoInputRef.current?.click()} disabled={logoUploading} className="eh-btn eh-btn-secondary w-full justify-center">
+                  {logoUploading ? <Loader2 size={13} className="animate-spin" /> : null}
+                  {profileData?.logoUrl ? "Change Logo" : "Upload Logo"}
                 </button>
+                <p className="text-[11px] text-[var(--eh-text-4)]">Recommended: 512x512px, JPG/PNG</p>
               </div>
-            </div>
-          </div>
-          )}
+            </Panel>
 
-          {schoolActiveSection === "trust-compliance" && (
-          <div className="card p-6">
-            <div className="flex items-center gap-2 pb-3 mb-4 border-b border-black/[0.05]">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-[0.07em]">
-                Trust & Compliance
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">UDISE Code</label>
-                <input
-                  type="text"
-                  value={schoolForm.udiseCode}
-                  onChange={(e) => handleSchoolChange("udiseCode", e.target.value)}
-                  className="input-base"
-                  placeholder="Enter your UDISE code"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Payment track record</label>
-                <select
-                  value={schoolForm.paymentTrackRecord}
-                  onChange={(e) => handleSchoolChange("paymentTrackRecord", e.target.value)}
-                  className="input-base appearance-none"
-                >
-                  <option value="">Select payment history</option>
-                  <option value="ON_TIME">Pays on time</option>
-                  <option value="DELAYED">Sometimes delayed</option>
-                  <option value="MIXED">Mixed record</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Working hours</label>
-                <input
-                  type="text"
-                  value={schoolForm.workingHours}
-                  onChange={(e) => handleSchoolChange("workingHours", e.target.value)}
-                  className="input-base"
-                  placeholder="e.g. 8am-4pm, Mon-Sat"
-                />
-              </div>
-
-              <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={schoolForm.hasPfEsi}
-                  onChange={(e) => handleSchoolChange("hasPfEsi", e.target.checked)}
-                  className="rounded"
-                  id="school-has-pf-esi"
-                />
-                <label htmlFor="school-has-pf-esi" className="text-sm font-medium text-gray-700">
-                  PF/ESI provided
-                </label>
-              </div>
-
-              <div className="sm:col-span-2 flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => void handleSchoolSectionSave()}
-                  disabled={schoolSaving}
-                  className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-brand transition-colors hover:bg-brand-600 disabled:opacity-60"
-                >
-                  {schoolSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                  Save Trust & Compliance
+            {/* Banner Image */}
+            <Panel className="p-5">
+              <label className="eh-label mb-3 block">Banner Image</label>
+              {(profileData as any)?.bannerUrl ? (
+                <div className="relative overflow-hidden rounded-xl">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={(profileData as any).bannerUrl} alt="School banner" className="h-28 w-full object-cover rounded-xl" />
+                  <button type="button" className="absolute bottom-2 right-2 eh-btn eh-btn-secondary eh-btn-sm bg-white/90">
+                    Change Banner
+                  </button>
+                </div>
+              ) : (
+                <button type="button" className="flex h-28 w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border-2 border-dashed border-[var(--eh-border)] bg-[var(--surface-base)] hover:bg-white transition-colors">
+                  <p className="text-[12px] font-medium text-[var(--eh-text-3)]">Click to upload banner</p>
+                  <p className="text-[11px] text-[var(--eh-text-4)]">Recommended: 1600×400px, JPG/PNG, Max 2MB</p>
                 </button>
+              )}
+            </Panel>
+
+            {/* Profile Completeness */}
+            <Panel className="p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[13px] font-semibold text-[var(--eh-text)]">Profile Completeness</h3>
               </div>
-            </div>
-          </div>
-          )}
-        </form>
+              <div className="flex items-baseline gap-1 mb-2">
+                <span className="text-[28px] font-bold text-[var(--eh-primary-700)]">{completenessScore}%</span>
+                <span className="text-[13px] text-[var(--eh-text-3)]">Complete</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-base)] mb-4">
+                <div className="h-full rounded-full bg-[var(--eh-primary-600)] transition-all" style={{ width: `${completenessScore}%` }} />
+              </div>
+              <p className="text-[12px] text-[var(--eh-text-3)] mb-3">Almost there! Fill the remaining details.</p>
+              <ul className="space-y-2">
+                {completenessItems.map((item) => (
+                  <li key={item.label} className="flex items-center gap-2 text-[12px]">
+                    <span className={["flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px]", item.done ? "bg-emerald-500 text-white" : "border border-[var(--eh-border)] text-[var(--eh-text-4)]"].join(" ")}>
+                      {item.done ? "✓" : "○"}
+                    </span>
+                    <span className={item.done ? "text-[var(--eh-text-2)]" : "text-[var(--eh-text-3)]"}>{item.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+
+            {/* Public Preview */}
+            <Panel className="p-5">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--eh-primary-50)]">
+                  <Eye size={14} className="text-[var(--eh-primary-600)]" />
+                </div>
+                <h3 className="text-[13px] font-semibold text-[var(--eh-text)]">Public Preview</h3>
+              </div>
+              <p className="text-[12px] text-[var(--eh-text-3)] mb-4">This is how your school profile appears to candidates.</p>
+              <div className="rounded-xl border border-[var(--eh-border)] p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--eh-primary-100)] text-[14px] font-bold text-[var(--eh-primary-700)]">
+                    {profileData?.logoUrl
+                      ? <img src={profileData.logoUrl} alt="" className="h-full w-full object-cover rounded-xl" />
+                      : schoolForm.schoolName?.charAt(0) || "S"}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[13px] font-semibold text-[var(--eh-text)] truncate">{schoolForm.schoolName || "Your School"}</p>
+                      {verificationStatus === "VERIFIED" && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600">
+                          <span>✓</span> Verified
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      <span className="flex items-center gap-0.5 text-[11px] text-[var(--eh-text-3)]">📍 {schoolForm.city || "City"}, Tamil Nadu</span>
+                      <span className="flex items-center gap-0.5 text-[11px] text-[var(--eh-text-3)]">🏛 {schoolForm.board || "Board"}</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[11px] leading-relaxed text-[var(--eh-text-3)] line-clamp-3">{schoolForm.about || "School description will appear here for candidates to read..."}</p>
+              </div>
+              <Link
+                href={`/profile/${(profileData as any)?.id || ""}`}
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--eh-border)] py-2 text-[12px] font-semibold text-[var(--eh-text-2)] hover:bg-[var(--surface-base)] transition-colors"
+              >
+                View Full Public Page <span className="text-[var(--eh-text-4)]">↗</span>
+              </Link>
+            </Panel>
+
+            {/* Tips */}
+            <Panel className="p-5">
+              <h3 className="text-[13px] font-semibold text-[var(--eh-text)] mb-3">💡 Tips</h3>
+              <ul className="space-y-2">
+                {[
+                  "Add a high-quality banner image to make your school profile stand out.",
+                  "Keep your compliance documents updated for trust and transparency.",
+                  "Complete all sections to increase candidate trust and engagement.",
+                ].map((tip) => (
+                  <li key={tip} className="flex items-start gap-1.5 text-[12px] text-[var(--eh-text-3)]">
+                    <span className="text-emerald-500 shrink-0 mt-0.5">✓</span> {tip}
+                  </li>
+                ))}
+              </ul>
+              <button type="button" className="mt-3 text-[12px] font-semibold text-[var(--eh-primary-600)] hover:text-[var(--eh-primary-800)]">
+                View Profile Best Practices →
+              </button>
+            </Panel>
+          </aside>
+        </div>
       </PageShell>
     );
   }

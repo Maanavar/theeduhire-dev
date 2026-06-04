@@ -4,18 +4,16 @@
 
 import { PrismaClient, Board, JobType, JobStatus, UserRole } from "@prisma/client";
 import { hash } from "bcryptjs";
+import { assertDestructiveDbScriptAllowed, getRequiredScriptPassword } from "../scripts/lib/script-safety";
 
 const prisma = new PrismaClient();
 
 function getSeedPassword() {
-  const password = process.env.SEED_DEFAULT_PASSWORD?.trim();
-  if (!password || password.length < 8) {
-    throw new Error("SEED_DEFAULT_PASSWORD must be set and at least 8 characters long.");
-  }
-  return password;
+  return getRequiredScriptPassword("SEED_DEFAULT_PASSWORD");
 }
 
 async function main() {
+  assertDestructiveDbScriptAllowed("db-scripts/seed.ts");
   console.log(" Seeding EduHire database...\n");
 
   await prisma.savedJob.deleteMany();

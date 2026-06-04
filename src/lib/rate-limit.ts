@@ -17,34 +17,37 @@ type RateLimitInput = {
 const db = prisma as any;
 
 export async function checkRateLimit(input: RateLimitInput): Promise<RateLimitResult> {
-  const now = new Date();
-  const windowStart = new Date(now.getTime() - input.windowMs);
+  return db.$transaction(async (tx: any) => {
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - input.windowMs);
 
-  // Count existing events in the window first, without creating a new one.
-  const count = await db.rateLimitEvent.count({
-    where: {
-      key: input.key,
-      createdAt: { gte: windowStart },
-    },
-  });
+    // Serialize count+insert per key so concurrent bursts cannot all pass.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.key}))`;
 
-  const allowed = count < input.limit;
-
-  // Only record the event when the request is allowed — denied requests must
-  // not write rows, otherwise the table grows unbounded on hammered endpoints.
-  if (allowed) {
-    await db.rateLimitEvent.create({
-      data: {
+    const count = await tx.rateLimitEvent.count({
+      where: {
         key: input.key,
-        action: input.action,
-        actorKey: input.actorKey || null,
+        createdAt: { gte: windowStart },
       },
     });
-  }
 
-  return {
-    allowed,
-    remaining: Math.max(0, input.limit - count - (allowed ? 1 : 0)),
-    resetAt: now.getTime() + input.windowMs,
-  };
+    const allowed = count < input.limit;
+
+    // Only record allowed requests so denied traffic cannot grow the table.
+    if (allowed) {
+      await tx.rateLimitEvent.create({
+        data: {
+          key: input.key,
+          action: input.action,
+          actorKey: input.actorKey || null,
+        },
+      });
+    }
+
+    return {
+      allowed,
+      remaining: Math.max(0, input.limit - count - (allowed ? 1 : 0)),
+      resetAt: now.getTime() + input.windowMs,
+    };
+  });
 }

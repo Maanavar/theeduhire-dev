@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Building2, ClipboardList, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { EmptyState, ErrorState, LoadingState } from "@/components/system/system-states";
-import { getApiErrorMessage } from "@/lib/api/client";
 import { cn, timeAgo } from "@/lib/utils";
 import AdminActionModal from "@/components/admin/admin-action-modal";
 
@@ -153,7 +152,7 @@ export default function OfflineSchoolsPage() {
         <div>
           <h1 className="text-[40px] font-semibold tracking-[-0.03em] text-[var(--eh-text)]">Offline schools</h1>
           <p className="mt-0.5 text-[14px] text-[var(--eh-text-3)]">
-            Schools that don't have digital accounts — EduHire manages hiring on their behalf.
+            Schools that don&apos;t have digital accounts — EduHire manages hiring on their behalf.
           </p>
         </div>
         <button

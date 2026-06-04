@@ -32,7 +32,8 @@ import { getJob, createJob, updateJob, improveJobWithAi } from "@/lib/api/jobs-c
 import { updateJobStatus } from "@/lib/api/hiring-client";
 
 type FieldErrors = Partial<Record<string, string>>;
-type ScreeningQuestionInput = { question: string; required: boolean };
+type QuestionType = "text" | "yes_no" | "rating" | "mcq";
+type ScreeningQuestionInput = { question: string; questionType: QuestionType; options: string[]; required: boolean };
 type PostJobFormState = {
   title: string;
   subject: string;
@@ -220,6 +221,19 @@ export default function PostJobPage() {
   const [draftJobId, setDraftJobId] = useState<string | null>(editingJobId);
   const topRef = useRef<HTMLDivElement>(null);
 
+  type BankQuestion = { id: string; question: string; questionType: QuestionType; options: string[]; required: boolean; isPreset: boolean; category: string };
+  const [bank, setBank] = useState<BankQuestion[]>([]);
+  const [bankOpen, setBankOpen] = useState(false);
+  const [bankSearch, setBankSearch] = useState("");
+  const [bankCategory, setBankCategory] = useState("All");
+
+  useEffect(() => {
+    fetch("/api/screening-questions")
+      .then((r) => r.json())
+      .then((j) => { if (j.success) setBank(j.data); })
+      .catch(() => {});
+  }, []);
+
   const [form, setForm] = useState<PostJobFormState>({
     title: "",
     subject: "Mathematics",
@@ -237,7 +251,7 @@ export default function PostJobPage() {
     description: "",
     requirements: "",
     benefits: "",
-    screeningQuestions: [{ question: "", required: false }],
+    screeningQuestions: [{ question: "", questionType: "text" as QuestionType, options: [], required: false }],
   });
 
   useEffect(() => {
@@ -265,11 +279,13 @@ export default function PostJobPage() {
           benefits: (job.benefits || []).map((item: { text: string }) => item.text).join("\n"),
           screeningQuestions:
             (job.screeningQuestions || []).length > 0
-              ? job.screeningQuestions.map((item: { question: string; required: boolean }) => ({
+              ? job.screeningQuestions.map((item: { question: string; questionType?: string; options?: string[]; required: boolean }) => ({
                   question: item.question,
+                  questionType: (item.questionType || "text") as QuestionType,
+                  options: item.options || [],
                   required: !!item.required,
                 }))
-              : [{ question: "", required: false }],
+              : [{ question: "", questionType: "text" as QuestionType, options: [], required: false }],
         });
       })
       .catch(() => {});
@@ -339,7 +355,13 @@ export default function PostJobPage() {
       requirements: form.requirements.split("\n").map((l) => l.trim()).filter(Boolean),
       benefits: form.benefits.split("\n").map((l) => l.trim()).filter(Boolean),
       screeningQuestions: form.screeningQuestions
-        .map((item, index) => ({ question: item.question.trim(), required: item.required, sortOrder: index }))
+        .map((item, index) => ({
+          question: item.question.trim(),
+          questionType: item.questionType,
+          options: item.options.filter((o) => o.trim().length > 0),
+          required: item.required,
+          sortOrder: index,
+        }))
         .filter((item) => item.question.length > 0),
     };
     const parsed = createJobSchema.safeParse(payload);
@@ -419,15 +441,19 @@ export default function PostJobPage() {
     try {
       const improved = await improveJobWithAi({
         title: form.title,
-        description: form.description,
-        requirements: form.requirements,
-        benefits: form.benefits,
+        subject: form.subject,
+        gradeLevel: form.gradeLevel,
+        board: form.board,
+        experience: form.experience || undefined,
+        description: form.description || undefined,
+        requirements: form.requirements || undefined,
+        benefits: form.benefits || undefined,
       });
       setForm((prev) => ({
         ...prev,
         ...(improved.description ? { description: improved.description } : {}),
-        ...(improved.requirements ? { requirements: improved.requirements } : {}),
-        ...(improved.benefits ? { benefits: improved.benefits } : {}),
+        ...(improved.requirements?.length ? { requirements: improved.requirements.join("\n") } : {}),
+        ...(improved.benefits?.length ? { benefits: improved.benefits.join("\n") } : {}),
       }));
       toast.success("AI suggestions applied");
     } catch (err) {
@@ -697,75 +723,215 @@ export default function PostJobPage() {
   );
 
   // ── Step 3: Screening ───────────────────────────────────────────────────────
+  const QUESTION_TYPES: { value: QuestionType; label: string; hint: string }[] = [
+    { value: "text", label: "Text", hint: "Free-text answer" },
+    { value: "yes_no", label: "Yes / No", hint: "Boolean toggle" },
+    { value: "rating", label: "Rating 1–5", hint: "Star rating" },
+    { value: "mcq", label: "Multiple choice", hint: "Pick one option" },
+  ];
+
+  const patchQuestion = (index: number, patch: Partial<ScreeningQuestionInput>) =>
+    setForm((prev) => ({
+      ...prev,
+      screeningQuestions: prev.screeningQuestions.map((q, i) => i === index ? { ...q, ...patch } : q),
+    }));
+
+  const addFromBank = (bq: BankQuestion) => {
+    const alreadyAdded = form.screeningQuestions.some((q) => q.question.trim() === bq.question.trim());
+    if (alreadyAdded) { toast.error("Question already added"); return; }
+    const isEmpty = form.screeningQuestions.length === 1 && !form.screeningQuestions[0].question.trim();
+    const newQ: ScreeningQuestionInput = { question: bq.question, questionType: bq.questionType, options: bq.options, required: bq.required };
+    setForm((prev) => ({
+      ...prev,
+      screeningQuestions: isEmpty ? [newQ] : [...prev.screeningQuestions, newQ],
+    }));
+    toast.success("Question added");
+  };
+
+  const bankCategories = ["All", ...Array.from(new Set(bank.map((b) => b.category)))];
+  const filteredBank = bank.filter((bq) => {
+    const byCategory = bankCategory === "All" || bq.category === bankCategory;
+    const bySearch = !bankSearch || bq.question.toLowerCase().includes(bankSearch.toLowerCase());
+    return byCategory && bySearch;
+  });
+
   const renderScreening = () => (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Header */}
       <div>
-        <p className="text-[13px] font-semibold text-[var(--eh-text)]">Screening questions</p>
-        <p className="text-[12px] text-[var(--eh-text-3)]">Optional — ask only what helps you shortlist faster. Teachers answer before submitting.</p>
+        <p className="text-[14px] font-semibold text-[var(--eh-text)]">Screening questions</p>
+        <p className="text-[12px] text-[var(--eh-text-3)] mt-0.5">
+          Candidates answer these when they apply. Ask only what helps you shortlist faster.
+        </p>
       </div>
 
-      {form.screeningQuestions.map((item, index) => (
-        <div key={`q-${index}`} className="rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-[12px] font-semibold text-[var(--eh-text-3)]">Question {index + 1}</p>
-            <button
-              type="button"
-              onClick={() =>
-                setForm((prev) => ({
-                  ...prev,
-                  screeningQuestions:
-                    prev.screeningQuestions.length > 1
-                      ? prev.screeningQuestions.filter((_, i) => i !== index)
-                      : [{ question: "", required: false }],
-                }))
-              }
-              className="rounded-lg p-1 text-[var(--eh-text-3)] hover:bg-white hover:text-red-500"
-            >
-              <Trash2 size={13} />
-            </button>
-          </div>
-          <textarea
-            value={item.question}
-            onChange={(e) =>
-              setForm((prev) => ({
-                ...prev,
-                screeningQuestions: prev.screeningQuestions.map((q, i) =>
-                  i === index ? { ...q, question: e.target.value } : q
-                ),
-              }))
-            }
-            className="input-base min-h-[72px]"
-            placeholder="e.g. Do you hold B.Ed and 3+ years CBSE experience?"
-          />
-          <label className="mt-2 inline-flex items-center gap-2 text-[12px] text-[var(--eh-text-2)]">
-            <input
-              type="checkbox"
-              checked={item.required}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  screeningQuestions: prev.screeningQuestions.map((q, i) =>
-                    i === index ? { ...q, required: e.target.checked } : q
-                  ),
-                }))
-              }
-            />
-            Required to apply
-          </label>
-        </div>
-      ))}
+      {/* Question bank picker */}
+      <div className="rounded-xl border border-[var(--eh-primary-200)] bg-[var(--eh-primary-50)]">
+        <button
+          type="button"
+          onClick={() => setBankOpen((p) => !p)}
+          className="flex w-full items-center justify-between px-4 py-3 text-[13px] font-semibold text-[var(--eh-primary-700)]"
+        >
+          <span className="flex items-center gap-2">
+            <Sparkles size={14} /> Browse question bank ({bank.length} ready-to-use questions)
+          </span>
+          <span className="text-[11px] font-normal text-[var(--eh-primary-500)]">{bankOpen ? "▲ Close" : "▼ Open"}</span>
+        </button>
 
+        {bankOpen && (
+          <div className="border-t border-[var(--eh-primary-200)] px-4 pb-4 pt-3 space-y-3">
+            {/* Search + category filter */}
+            <div className="flex flex-wrap gap-2">
+              <input
+                value={bankSearch}
+                onChange={(e) => setBankSearch(e.target.value)}
+                placeholder="Search questions..."
+                className="input-base flex-1 min-w-[180px] text-[13px]"
+              />
+              <div className="eh-select-wrap">
+                <select value={bankCategory} onChange={(e) => setBankCategory(e.target.value)} className="input-base text-[13px]">
+                  {bankCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Question list */}
+            <div className="max-h-[320px] overflow-y-auto space-y-2 pr-1">
+              {filteredBank.length === 0 ? (
+                <p className="text-[12px] text-[var(--eh-text-3)] py-4 text-center">No questions match your search.</p>
+              ) : filteredBank.map((bq) => {
+                const typeInfo = QUESTION_TYPES.find((t) => t.value === bq.questionType);
+                const alreadyAdded = form.screeningQuestions.some((q) => q.question.trim() === bq.question.trim());
+                return (
+                  <div key={bq.id} className="flex items-start gap-3 rounded-xl border border-[var(--eh-border)] bg-white px-3 py-2.5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-[var(--eh-text)] leading-snug">{bq.question}</p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="rounded-full border border-[var(--eh-border)] bg-[var(--surface-base)] px-2 py-0.5 text-[10px] font-medium text-[var(--eh-text-3)]">
+                          {typeInfo?.label}
+                        </span>
+                        <span className="text-[10px] text-[var(--eh-text-4)]">{bq.category}</span>
+                        {bq.required && <span className="text-[10px] text-red-500 font-medium">Required</span>}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => addFromBank(bq)}
+                      disabled={alreadyAdded}
+                      className={["rounded-lg px-3 py-1.5 text-[12px] font-semibold shrink-0 transition-colors", alreadyAdded ? "bg-[var(--surface-base)] text-[var(--eh-text-4)] cursor-default" : "bg-[var(--eh-primary-600)] text-white hover:bg-[var(--eh-primary-700)]"].join(" ")}
+                    >
+                      {alreadyAdded ? "Added" : "+ Use"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Added questions */}
+      <div className="space-y-3">
+        {form.screeningQuestions.map((item, index) => (
+          <div key={`q-${index}`} className="rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[12px] font-semibold text-[var(--eh-text-3)]">Question {index + 1}</p>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((prev) => ({
+                    ...prev,
+                    screeningQuestions:
+                      prev.screeningQuestions.length > 1
+                        ? prev.screeningQuestions.filter((_, i) => i !== index)
+                        : [{ question: "", questionType: "text", options: [], required: false }],
+                  }))
+                }
+                className="rounded-lg p-1 text-[var(--eh-text-3)] hover:bg-white hover:text-red-500"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+
+            {/* Question text */}
+            <textarea
+              value={item.question}
+              onChange={(e) => patchQuestion(index, { question: e.target.value })}
+              className="input-base min-h-[64px] resize-y"
+              placeholder="Type your question here..."
+            />
+
+            {/* Question type selector */}
+            <div className="flex flex-wrap gap-2">
+              {QUESTION_TYPES.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => patchQuestion(index, { questionType: t.value, options: t.value !== "mcq" ? [] : item.options })}
+                  className={["rounded-full border px-3 py-1 text-[11px] font-semibold transition-all", item.questionType === t.value ? "border-[var(--eh-primary-400)] bg-[var(--eh-primary-600)] text-white" : "border-[var(--eh-border)] bg-white text-[var(--eh-text-2)] hover:border-[var(--eh-primary-300)]"].join(" ")}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* MCQ options editor */}
+            {item.questionType === "mcq" && (
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold text-[var(--eh-text-3)]">Answer choices</p>
+                {item.options.map((opt, oi) => (
+                  <div key={oi} className="flex items-center gap-2">
+                    <input
+                      value={opt}
+                      onChange={(e) => patchQuestion(index, { options: item.options.map((o, j) => j === oi ? e.target.value : o) })}
+                      className="input-base flex-1 text-[13px]"
+                      placeholder={`Choice ${oi + 1}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => patchQuestion(index, { options: item.options.filter((_, j) => j !== oi) })}
+                      className="rounded-lg p-1.5 text-[var(--eh-text-3)] hover:text-red-500 hover:bg-white"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => patchQuestion(index, { options: [...item.options, ""] })}
+                  className="text-[12px] font-semibold text-[var(--eh-primary-600)] hover:text-[var(--eh-primary-800)]"
+                >
+                  + Add choice
+                </button>
+              </div>
+            )}
+
+            {/* Required toggle */}
+            <label className="inline-flex items-center gap-2 text-[12px] text-[var(--eh-text-2)] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={item.required}
+                onChange={(e) => patchQuestion(index, { required: e.target.checked })}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              Required to apply
+            </label>
+          </div>
+        ))}
+      </div>
+
+      {/* Add blank question */}
       <button
         type="button"
         className="eh-btn eh-btn-secondary w-full"
         onClick={() =>
           setForm((prev) => ({
             ...prev,
-            screeningQuestions: [...prev.screeningQuestions, { question: "", required: false }],
+            screeningQuestions: [...prev.screeningQuestions, { question: "", questionType: "text", options: [], required: false }],
           }))
         }
       >
-        <Plus size={13} /> Add question
+        <Plus size={13} /> Add custom question
       </button>
     </div>
   );

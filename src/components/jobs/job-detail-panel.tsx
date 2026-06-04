@@ -402,7 +402,7 @@ export default function JobDetailPanel({ jobId }: Props) {
         jobId={job.id}
         jobTitle={job.title}
         schoolName={job.school.schoolName}
-        screeningQuestions={job.screeningQuestions || []}
+        screeningQuestions={(job.screeningQuestions || []) as Parameters<typeof ApplyForm>[0]["screeningQuestions"]}
         open={applyOpen}
         onClose={() => setApplyOpen(false)}
         onSuccess={handleApplySuccess}

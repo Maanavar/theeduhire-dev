@@ -49,7 +49,7 @@ async function updateArjunProfile() {
 
     // Add work experiences
     if (teacherProfile) {
-      const exp1 = await prisma.experience.create({
+      await prisma.experience.create({
         data: {
           teacherProfileId: teacherProfile.id,
           schoolName: "Velammal Vidyalaya",
@@ -62,7 +62,7 @@ async function updateArjunProfile() {
       });
       console.log("✓ Experience 1 added (current)");
 
-      const exp2 = await prisma.experience.create({
+      await prisma.experience.create({
         data: {
           teacherProfileId: teacherProfile.id,
           schoolName: "Sri Aurobindo Pathanam",
@@ -75,7 +75,7 @@ async function updateArjunProfile() {
       });
       console.log("✓ Experience 2 added");
 
-      const exp3 = await prisma.experience.create({
+      await prisma.experience.create({
         data: {
           teacherProfileId: teacherProfile.id,
           schoolName: "Delhi Public School",
@@ -89,7 +89,7 @@ async function updateArjunProfile() {
       console.log("✓ Experience 3 added");
 
       // Add certifications
-      const cert1 = await prisma.certification.create({
+      await prisma.certification.create({
         data: {
           teacherProfileId: teacherProfile.id,
           name: "JEE Main & Advanced Coaching Certification",
@@ -101,7 +101,7 @@ async function updateArjunProfile() {
       });
       console.log("✓ Certification 1 added");
 
-      const cert2 = await prisma.certification.create({
+      await prisma.certification.create({
         data: {
           teacherProfileId: teacherProfile.id,
           name: "Smart Classroom Technologies",
@@ -113,7 +113,7 @@ async function updateArjunProfile() {
       });
       console.log("✓ Certification 2 added");
 
-      const cert3 = await prisma.certification.create({
+      await prisma.certification.create({
         data: {
           teacherProfileId: teacherProfile.id,
           name: "Online Teaching & Digital Pedagogy",
@@ -127,7 +127,7 @@ async function updateArjunProfile() {
     }
 
     // Add resume
-    const resume = await prisma.resume.create({
+    await prisma.resume.create({
       data: {
         userId: user.id,
         fileName: "Arjun_Venkatesh_Resume.pdf",

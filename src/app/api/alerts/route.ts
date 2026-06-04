@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     }
 
     // IMMEDIATE alerts require Teacher Pro plan
-    let frequency = parsed.data.frequency;
+    const frequency = parsed.data.frequency;
     if (frequency === "IMMEDIATE") {
       const pro = await isTeacherFeatured(auth.user.id);
       if (!pro) {

@@ -6,7 +6,7 @@ type ApiEnvelope<TData, TError> =
   | ({ success: true; data: TData } & Record<string, unknown>)
   | ({ success: false; error?: TError } & Record<string, unknown>);
 
-type ApiSuccessEnvelope<TData, TExtra extends object = {}> = {
+type ApiSuccessEnvelope<TData, TExtra extends object = Record<string, never>> = {
   success: true;
   data: TData;
 } & TExtra;
@@ -88,7 +88,7 @@ export async function apiRequest<TData, TError = unknown>(
 export async function apiRequestWithMeta<
   TData,
   TError = unknown,
-  TExtra extends object = {}
+  TExtra extends object = Record<string, never>
 >(
   input: RequestInfo | URL,
   init?: RequestInit,

@@ -264,7 +264,7 @@ export async function PUT(req: NextRequest) {
     };
 
     const profile = await prisma.$transaction(async (tx: any) => {
-      let nextProfile = await tx.teacherProfile.upsert({
+      const nextProfile = await tx.teacherProfile.upsert({
         where: { userId: auth.user.id },
         update: profileData,
         create: {

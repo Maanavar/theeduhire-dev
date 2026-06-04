@@ -2,10 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { ArrowRight, Bookmark, BookmarkCheck, CheckCircle2, ShieldCheck } from "lucide-react";
+import { Bookmark, BookmarkCheck, ShieldCheck } from "lucide-react";
 import ApplyForm from "@/components/forms/apply-form";
 import { toast } from "@/components/ui/toast";
 import { trackEvent } from "@/lib/analytics";
+import {
+  AlreadyAppliedState,
+  ApplicationSubmittedState,
+  ExpiredJobState,
+  ProfileIncompleteState,
+} from "@/components/system/illustrated-states";
+import Link from "next/link";
 
 interface Props {
   jobId: string;
@@ -14,6 +21,9 @@ interface Props {
   screeningQuestions: Array<{ id: string; question: string; required: boolean; sortOrder: number }>;
   initialApplied: boolean;
   initialSaved: boolean;
+  jobStatus?: string;
+  appliedAt?: string;
+  hasProfile?: boolean;
 }
 
 export default function JobDetailApplyRail({
@@ -23,15 +33,19 @@ export default function JobDetailApplyRail({
   screeningQuestions,
   initialApplied,
   initialSaved,
+  jobStatus = "ACTIVE",
+  appliedAt,
+  hasProfile = true,
 }: Props) {
   const { data: session } = useSession();
   const [isApplied, setIsApplied] = useState(initialApplied);
   const [isSaved, setIsSaved] = useState(initialSaved);
   const [saving, setSaving] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
-  const [showAppliedBanner, setShowAppliedBanner] = useState(initialApplied);
+  const [showSubmittedState, setShowSubmittedState] = useState(false);
 
   const isSchoolAdmin = session?.user?.role === "SCHOOL_ADMIN";
+  const isExpired = jobStatus === "EXPIRED" || jobStatus === "CLOSED";
 
   useEffect(() => {
     trackEvent("job_viewed", {
@@ -75,33 +89,78 @@ export default function JobDetailApplyRail({
     );
   }
 
+  // ── Expired job ──────────────────────────────────────────────────────────
+  if (isExpired) {
+    return (
+      <aside className="space-y-4 lg:sticky lg:top-24">
+        <ExpiredJobState
+          actions={
+            <Link href="/jobs" className="eh-btn eh-btn-secondary">
+              Browse Other Jobs
+            </Link>
+          }
+        />
+      </aside>
+    );
+  }
+
+  // ── Already applied (and no pending "just submitted" animation) ──────────
+  if (isApplied && !showSubmittedState) {
+    return (
+      <aside className="space-y-4 lg:sticky lg:top-24">
+        <AlreadyAppliedState
+          appliedAt={appliedAt}
+          actions={
+            <Link href="/dashboard/applications" className="eh-btn eh-btn-secondary">
+              View Application
+            </Link>
+          }
+        />
+        <SaveButton isSaved={isSaved} saving={saving} onToggle={toggleSave} />
+      </aside>
+    );
+  }
+
+  // ── Just submitted (success moment) ─────────────────────────────────────
+  if (showSubmittedState) {
+    return (
+      <aside className="space-y-4 lg:sticky lg:top-24">
+        <ApplicationSubmittedState
+          actions={
+            <Link href="/dashboard/applications" className="eh-btn eh-btn-primary">
+              View My Applications
+            </Link>
+          }
+        />
+      </aside>
+    );
+  }
+
+  // ── Not signed in / no profile ───────────────────────────────────────────
+  if (!session?.user || !hasProfile) {
+    return (
+      <aside className="space-y-4 lg:sticky lg:top-24">
+        <ProfileIncompleteState
+          actions={
+            <>
+              <Link href={`/auth/signin?callbackUrl=/jobs/${jobId}`} className="eh-btn eh-btn-primary">
+                Sign in to Apply
+              </Link>
+              <Link href="/auth/signup" className="eh-btn eh-btn-secondary">
+                Create Account
+              </Link>
+            </>
+          }
+        />
+        <SaveButton isSaved={isSaved} saving={saving} onToggle={toggleSave} />
+      </aside>
+    );
+  }
+
+  // ── Default: can apply ───────────────────────────────────────────────────
   return (
     <>
       <aside className="space-y-4 lg:sticky lg:top-24">
-        {showAppliedBanner ? (
-          <div className="rounded-[26px] border border-emerald-200 bg-emerald-50 px-4 py-4">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-emerald-700">Application submitted</p>
-            <p className="mt-2 text-[13px] leading-[1.6] text-emerald-800">
-              Your application is in. You can follow updates from your dashboard.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-3">
-              <a
-                href="/dashboard/applications"
-                className="text-[12px] font-semibold text-emerald-700 underline underline-offset-2"
-              >
-                Track applications
-              </a>
-              <button
-                type="button"
-                onClick={() => setShowAppliedBanner(false)}
-                className="text-[12px] font-semibold text-emerald-700"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        ) : null}
-
         <div className="rounded-[30px] border border-[var(--eh-border)] bg-white p-5 shadow-[0_14px_40px_rgba(15,23,42,0.04)]">
           <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">Apply</p>
           <h2 className="mt-2 text-[24px] font-semibold leading-[1.05] tracking-[-0.03em] text-[var(--eh-text)]">
@@ -112,27 +171,14 @@ export default function JobDetailApplyRail({
           </p>
 
           <div className="mt-5 space-y-3">
-            {isApplied ? (
-              <div className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-                <CheckCircle2 size={16} /> Applied
-              </div>
-            ) : (
-              <button
-                onClick={() => setApplyOpen(true)}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600"
-              >
-                Apply now <ArrowRight size={15} />
-              </button>
-            )}
-
             <button
-              onClick={toggleSave}
-              disabled={saving}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--eh-border)] px-4 py-3 text-sm font-medium text-[var(--eh-text-2)] transition-colors hover:border-brand-500 hover:text-brand-600 disabled:opacity-60"
+              onClick={() => setApplyOpen(true)}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600"
             >
-              {isSaved ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
-              {isSaved ? "Saved" : "Save job"}
+              Apply now
             </button>
+
+            <SaveButton isSaved={isSaved} saving={saving} onToggle={toggleSave} asInline />
           </div>
         </div>
 
@@ -167,9 +213,32 @@ export default function JobDetailApplyRail({
         onClose={() => setApplyOpen(false)}
         onSuccess={() => {
           setIsApplied(true);
-          setShowAppliedBanner(true);
+          setShowSubmittedState(true);
         }}
       />
     </>
+  );
+}
+
+function SaveButton({
+  isSaved,
+  saving,
+  onToggle,
+  asInline = false,
+}: {
+  isSaved: boolean;
+  saving: boolean;
+  onToggle: () => void;
+  asInline?: boolean;
+}) {
+  const base = asInline
+    ? "inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--eh-border)] px-4 py-3 text-sm font-medium text-[var(--eh-text-2)] transition-colors hover:border-brand-500 hover:text-brand-600 disabled:opacity-60"
+    : "inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--eh-border)] bg-white px-4 py-3 text-sm font-medium text-[var(--eh-text-2)] shadow-sm transition-colors hover:border-brand-500 hover:text-brand-600 disabled:opacity-60";
+
+  return (
+    <button onClick={onToggle} disabled={saving} className={base}>
+      {isSaved ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
+      {isSaved ? "Saved" : "Save job"}
+    </button>
   );
 }

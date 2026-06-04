@@ -122,7 +122,7 @@ export default function ManagedRecruitmentPage() {
               We find the teacher. You confirm the hire.
             </h1>
             <p className="mt-4 text-[15px] leading-[1.8] text-[var(--eh-text-2)]">
-              Submit your requirement. Our team handles sourcing, screening, and shortlisting from EduHire's verified teacher pool. You only pay ₹10,000 on a confirmed hire — no upfront cost.
+              Submit your requirement. Our team handles sourcing, screening, and shortlisting from EduHire&apos;s verified teacher pool. You only pay ₹10,000 on a confirmed hire — no upfront cost.
             </p>
 
             <div className="mt-8 space-y-4">

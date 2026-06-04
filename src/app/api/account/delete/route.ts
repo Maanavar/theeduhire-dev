@@ -5,6 +5,11 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { removeStoredObject } from "@/lib/storage";
+
+function uniqueStorageRefs(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
 
 export async function DELETE() {
   const auth = await requireAuth();
@@ -15,6 +20,35 @@ export async function DELETE() {
   const userId = auth.user.id;
 
   try {
+    const [user, teacherProfile, schoolProfile, resumes] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { avatarUrl: true },
+      }),
+      prisma.teacherProfile.findUnique({
+        where: { userId },
+        select: { demoVideoUrl: true, lessonPlanUrl: true },
+      }),
+      prisma.schoolProfile.findUnique({
+        where: { userId },
+        select: { logoUrl: true },
+      }),
+      prisma.resume.findMany({
+        where: { userId },
+        select: { fileUrl: true },
+      }),
+    ]);
+
+    const storageRefs = uniqueStorageRefs([
+      user?.avatarUrl,
+      teacherProfile?.demoVideoUrl,
+      teacherProfile?.lessonPlanUrl,
+      schoolProfile?.logoUrl,
+      ...resumes.map((resume) => resume.fileUrl),
+    ]);
+
+    await Promise.all(storageRefs.map((ref) => removeStoredObject(ref)));
+
     // Revoke all sessions first so JWT tokens stop working immediately.
     const db = prisma as any;
     await db.userSession.updateMany({

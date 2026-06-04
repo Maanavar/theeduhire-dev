@@ -2,43 +2,132 @@
 // Delegates to email (Resend) - SMS/WhatsApp via MSG91 can be added later
 
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { requireAuth } from "@/lib/session";
 import { sendStatusUpdate, sendApplicationConfirmation } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
+import { canManageApplication } from "@/lib/policies/application-policy";
+import { checkRateLimit } from "@/lib/rate-limit";
+import {
+  NOTIFICATION_SEND_RATE_LIMIT_WINDOW_MS,
+  NOTIFICATION_SEND_USER_LIMIT,
+} from "@/config/constants";
+
+const applicationStatusSchema = z.enum([
+  "PENDING",
+  "REVIEWED",
+  "SHORTLISTED",
+  "REJECTED",
+  "HIRED",
+  "INTERVIEW_SCHEDULED",
+  "INTERVIEW_COMPLETED",
+]);
+
+const sendNotificationSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("STATUS_CHANGED"),
+    recipientId: z.string().uuid(),
+    data: z.object({
+      jobId: z.string().uuid(),
+      status: applicationStatusSchema.optional(),
+    }),
+  }),
+  z.object({
+    type: z.literal("APPLICATION_RECEIVED"),
+    recipientId: z.string().uuid(),
+    data: z.object({
+      jobId: z.string().uuid(),
+    }),
+  }),
+]);
 
 export async function POST(req: NextRequest) {
   try {
     const auth = await requireAuth(["ADMIN", "SCHOOL_ADMIN"]);
     if ("error" in auth) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
 
-    const { type, recipientId, data } = await req.json();
-    if (!type || !recipientId) return NextResponse.json({ success: false, error: "type and recipientId required" }, { status: 400 });
+    const rateLimit = await checkRateLimit({
+      key: `notifications.send:${auth.user.id}`,
+      action: "notifications.send",
+      actorKey: auth.user.id,
+      limit: NOTIFICATION_SEND_USER_LIMIT,
+      windowMs: NOTIFICATION_SEND_RATE_LIMIT_WINDOW_MS,
+    });
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many notification requests. Please try again later." },
+        { status: 429 }
+      );
+    }
 
-    const recipient = await prisma.user.findUnique({ where: { id: recipientId }, select: { email: true, name: true } });
-    if (!recipient) return NextResponse.json({ success: false, error: "Recipient not found" }, { status: 404 });
+    const body = await req.json();
+    const parsed = sendNotificationSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: parsed.error.errors[0]?.message || "Invalid notification request" },
+        { status: 400 }
+      );
+    }
+
+    const { type, recipientId, data } = parsed.data;
+    const application = await prisma.application.findUnique({
+      where: {
+        jobId_applicantId: {
+          jobId: data.jobId,
+          applicantId: recipientId,
+        },
+      },
+      select: {
+        status: true,
+        applicant: { select: { email: true, name: true } },
+        job: {
+          select: {
+            id: true,
+            title: true,
+            postedBy: true,
+            schoolId: true,
+            school: { select: { schoolName: true } },
+          },
+        },
+      },
+    });
+
+    if (!application) {
+      return NextResponse.json({ success: false, error: "Application not found" }, { status: 404 });
+    }
+
+    const authorized = await canManageApplication(prisma, auth.user, application);
+    if (!authorized) {
+      return NextResponse.json({ success: false, error: "Insufficient permissions" }, { status: 403 });
+    }
+
+    if (type === "STATUS_CHANGED" && data.status && data.status !== application.status) {
+      return NextResponse.json(
+        { success: false, error: "Notification status does not match the current application status" },
+        { status: 409 }
+      );
+    }
 
     switch (type) {
       case "STATUS_CHANGED":
         await sendStatusUpdate({
-          teacherEmail: recipient.email,
-          teacherName: recipient.name,
-          jobTitle: data.jobTitle,
-          schoolName: data.schoolName,
-          newStatus: data.status,
-          jobId: data.jobId,
+          teacherEmail: application.applicant.email,
+          teacherName: application.applicant.name,
+          jobTitle: application.job.title,
+          schoolName: application.job.school.schoolName,
+          newStatus: application.status,
+          jobId: application.job.id,
         });
         break;
       case "APPLICATION_RECEIVED":
         await sendApplicationConfirmation({
-          teacherEmail: recipient.email,
-          teacherName: recipient.name,
-          jobTitle: data.jobTitle,
-          schoolName: data.schoolName,
-          jobId: data.jobId,
+          teacherEmail: application.applicant.email,
+          teacherName: application.applicant.name,
+          jobTitle: application.job.title,
+          schoolName: application.job.school.schoolName,
+          jobId: application.job.id,
         });
         break;
-      default:
-        return NextResponse.json({ success: false, error: `Unknown notification type: ${type}` }, { status: 400 });
     }
 
     return NextResponse.json({ success: true });

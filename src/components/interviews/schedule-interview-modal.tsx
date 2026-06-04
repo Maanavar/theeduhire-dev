@@ -1,13 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Calendar, Clock, Loader2, MapPin, Phone, Video, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApiErrorMessage } from "@/lib/api/client";
-import {
-  scheduleInterview,
-  type InterviewRecord,
-} from "@/lib/api/hiring-client";
+import { scheduleInterview, type InterviewRecord } from "@/lib/api/hiring-client";
 
 interface ScheduleInterviewModalProps {
   open: boolean;
@@ -15,6 +12,21 @@ interface ScheduleInterviewModalProps {
   applicationId: string;
   onSuccess: (interview: InterviewRecord) => void;
 }
+
+const DURATION_OPTIONS = [
+  { value: '15', label: '15 min' },
+  { value: '30', label: '30 min' },
+  { value: '45', label: '45 min' },
+  { value: '60', label: '1 hour' },
+  { value: '90', label: '90 min' },
+  { value: '120', label: '2 hours' },
+];
+
+const TYPE_OPTIONS = [
+  { value: 'VIDEO', label: 'Video Call', Icon: Video },
+  { value: 'PHONE', label: 'Phone', Icon: Phone },
+  { value: 'IN_PERSON', label: 'In Person', Icon: MapPin },
+] as const;
 
 export function ScheduleInterviewModal({
   open,
@@ -26,29 +38,32 @@ export function ScheduleInterviewModal({
   const [formData, setFormData] = useState({
     scheduledAt: '',
     durationMins: '30',
-    type: 'VIDEO',
+    type: 'VIDEO' as 'VIDEO' | 'PHONE' | 'IN_PERSON',
     meetingLink: '',
     location: '',
     schoolNotes: '',
   });
 
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const firstInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onOpenChange(false); };
+    document.addEventListener('keydown', handler);
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => firstInputRef.current?.focus(), 60);
+    return () => {
+      document.removeEventListener('keydown', handler);
+      document.body.style.overflow = '';
+    };
+  }, [open, onOpenChange]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
-    if (!formData.scheduledAt) {
-      toast.error('Please select a date and time');
-      return;
-    }
-
-    if (formData.type === 'VIDEO' && !formData.meetingLink) {
-      toast.error('Please provide a meeting link for video interviews');
-      return;
-    }
-
-    if (formData.type === 'IN_PERSON' && !formData.location) {
-      toast.error('Please provide a location for in-person interviews');
-      return;
-    }
+    if (!formData.scheduledAt) { toast.error('Please select a date and time'); return; }
+    if (formData.type === 'VIDEO' && !formData.meetingLink) { toast.error('Please add a meeting link'); return; }
+    if (formData.type === 'IN_PERSON' && !formData.location) { toast.error('Please add a location'); return; }
 
     try {
       setLoading(true);
@@ -56,22 +71,15 @@ export function ScheduleInterviewModal({
         applicationId,
         scheduledAt: new Date(formData.scheduledAt).toISOString(),
         durationMins: parseInt(formData.durationMins),
-        type: formData.type as "VIDEO" | "PHONE" | "IN_PERSON",
+        type: formData.type,
         meetingLink: formData.meetingLink || undefined,
         location: formData.location || undefined,
         schoolNotes: formData.schoolNotes || undefined,
       });
-      toast.success('Interview scheduled successfully');
+      toast.success('Interview scheduled');
       onSuccess(data);
       onOpenChange(false);
-      setFormData({
-        scheduledAt: '',
-        durationMins: '30',
-        type: 'VIDEO',
-        meetingLink: '',
-        location: '',
-        schoolNotes: '',
-      });
+      setFormData({ scheduledAt: '', durationMins: '30', type: 'VIDEO', meetingLink: '', location: '', schoolNotes: '' });
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Failed to schedule interview'));
     } finally {
@@ -82,165 +90,179 @@ export function ScheduleInterviewModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-[500px] w-full max-h-[90vh] overflow-y-auto">
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-overlay-in"
+      style={{ backgroundColor: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)' }}
+      onClick={(e) => { if (e.target === overlayRef.current) onOpenChange(false); }}
+    >
+      <div className="w-full sm:max-w-[480px] bg-white rounded-none sm:rounded-2xl shadow-2xl overflow-hidden animate-scale-in max-h-[96vh] flex flex-col">
+
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold">Schedule Interview</h2>
+        <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-[var(--eh-border)]">
+          <div>
+            <h2 className="text-[18px] font-semibold text-[var(--eh-text)] tracking-[-0.02em]">Schedule Interview</h2>
+            <p className="mt-0.5 text-[13px] text-[var(--eh-text-3)]">Candidate gets an email invite with calendar details.</p>
+          </div>
           <button
+            type="button"
             onClick={() => onOpenChange(false)}
-            className="text-gray-400 hover:text-gray-600"
+            aria-label="Close"
+            className="ml-4 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[var(--eh-text-3)] transition-colors hover:bg-[var(--surface-base)] hover:text-[var(--eh-text)]"
           >
-            <X className="w-5 h-5" />
+            <X size={16} />
           </button>
         </div>
 
-        {/* Description */}
-        <p className="text-sm text-gray-600 px-6 pt-4">
-          Set up an interview with the candidate. They'll receive an email invitation with calendar details.
-        </p>
+        {/* Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-5 scrollbar-thin">
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Date & Time */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date & Time
-            </label>
-            <input
-              type="datetime-local"
-              value={formData.scheduledAt}
-              onChange={(e) => setFormData({ ...formData, scheduledAt: e.target.value })}
-              disabled={loading}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
-            />
+            <label className="eh-label">Date &amp; Time *</label>
+            <div className="relative">
+              <Calendar size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--eh-text-4)]" />
+              <input
+                ref={firstInputRef}
+                type="datetime-local"
+                value={formData.scheduledAt}
+                onChange={(e) => setFormData({ ...formData, scheduledAt: e.target.value })}
+                disabled={loading}
+                required
+                className="input-base pl-9"
+              />
+            </div>
           </div>
 
           {/* Duration */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Duration (minutes)
-            </label>
-            <select
-              value={formData.durationMins}
-              onChange={(e) => setFormData({ ...formData, durationMins: e.target.value })}
-              disabled={loading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
-            >
-              <option value="15">15 minutes</option>
-              <option value="30">30 minutes</option>
-              <option value="45">45 minutes</option>
-              <option value="60">60 minutes</option>
-              <option value="90">90 minutes</option>
-              <option value="120">120 minutes</option>
-            </select>
+            <label className="eh-label">Duration</label>
+            <div className="flex flex-wrap gap-2">
+              {DURATION_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => setFormData({ ...formData, durationMins: opt.value })}
+                  className={[
+                    'flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-medium transition-all',
+                    formData.durationMins === opt.value
+                      ? 'border-[var(--eh-primary-400)] bg-[var(--eh-primary-50)] text-[var(--eh-primary-700)] shadow-[0_0_0_2px_var(--eh-primary-100)]'
+                      : 'border-[var(--eh-border)] bg-white text-[var(--eh-text-2)] hover:border-[var(--eh-border-strong)]',
+                  ].join(' ')}
+                >
+                  <Clock size={12} /> {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Interview Type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Interview Type
-            </label>
-            <select
-              value={formData.type}
-              onChange={(e) => setFormData({ ...formData, type: e.target.value, meetingLink: '', location: '' })}
-              disabled={loading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
-            >
-              <option value="VIDEO">Video Call</option>
-              <option value="PHONE">Phone Call</option>
-              <option value="IN_PERSON">In Person</option>
-            </select>
+            <label className="eh-label">Interview Type</label>
+            <div className="grid grid-cols-3 gap-2">
+              {TYPE_OPTIONS.map(({ value, label, Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => setFormData({ ...formData, type: value, meetingLink: '', location: '' })}
+                  className={[
+                    'flex flex-col items-center gap-1.5 rounded-xl border px-3 py-3 text-[12px] font-medium transition-all',
+                    formData.type === value
+                      ? 'border-[var(--eh-primary-400)] bg-[var(--eh-primary-50)] text-[var(--eh-primary-700)] shadow-[0_0_0_2px_var(--eh-primary-100)]'
+                      : 'border-[var(--eh-border)] bg-white text-[var(--eh-text-2)] hover:border-[var(--eh-border-strong)]',
+                  ].join(' ')}
+                >
+                  <Icon size={16} />
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Meeting Link (for video) */}
+          {/* Meeting Link */}
           {formData.type === 'VIDEO' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Meeting Link
-              </label>
+            <div className="animate-slide-from-bottom">
+              <label className="eh-label">Meeting Link *</label>
               <input
                 type="url"
-                placeholder="https://meet.google.com/... or https://zoom.us/..."
+                placeholder="https://meet.google.com/ or https://zoom.us/..."
                 value={formData.meetingLink}
                 onChange={(e) => setFormData({ ...formData, meetingLink: e.target.value })}
                 disabled={loading}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
+                className="input-base"
               />
             </div>
           )}
 
-          {/* Location (for in-person) */}
+          {/* Location */}
           {formData.type === 'IN_PERSON' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Location
-              </label>
+            <div className="animate-slide-from-bottom">
+              <label className="eh-label">Location *</label>
               <textarea
-                placeholder="e.g., Conference Room A, Building B, 2nd Floor"
+                placeholder="e.g. Conference Room A, 2nd Floor, Main Building"
                 value={formData.location}
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 disabled={loading}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 resize-none"
-                rows={3}
+                rows={2}
+                className="input-base resize-none"
               />
             </div>
           )}
 
-          {/* Notes (for phone) */}
+          {/* Phone notes */}
           {formData.type === 'PHONE' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Additional Notes (optional)
-              </label>
-              <textarea
-                placeholder="e.g., Call number, preferred time, dial-in instructions..."
+            <div className="animate-slide-from-bottom">
+              <label className="eh-label">Call Instructions <span className="font-normal text-[var(--eh-text-4)]">(optional)</span></label>
+              <input
+                type="text"
+                placeholder="e.g. Dial +91 98xxx, ask for HR"
                 value={formData.location}
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 disabled={loading}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 resize-none"
-                rows={3}
+                className="input-base"
               />
             </div>
           )}
 
+          {/* Internal Notes */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Internal Notes (optional)
-            </label>
+            <label className="eh-label">Internal Notes <span className="font-normal text-[var(--eh-text-4)]">(optional, not sent to candidate)</span></label>
             <textarea
-              placeholder="Interview panel instructions or context"
+              placeholder="Panel members, assessment criteria, preparation notes..."
               value={formData.schoolNotes}
               onChange={(e) => setFormData({ ...formData, schoolNotes: e.target.value })}
               disabled={loading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 resize-none"
-              rows={3}
+              rows={2}
+              className="input-base resize-none"
             />
           </div>
-
-          {/* Action Buttons */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200 mt-6">
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
-            >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              Schedule Interview
-            </button>
-          </div>
         </form>
+
+        {/* Footer */}
+        <div className="flex gap-3 border-t border-[var(--eh-border)] px-6 py-4">
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+            className="eh-btn eh-btn-secondary flex-1"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form=""
+            disabled={loading}
+            onClick={handleSubmit}
+            className="eh-btn eh-btn-primary flex-1"
+          >
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            Schedule Interview
+          </button>
+        </div>
       </div>
     </div>
   );

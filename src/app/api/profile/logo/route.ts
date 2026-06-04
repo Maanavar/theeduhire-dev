@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase";
 import { prisma } from "@/lib/prisma";
+import { fileBufferMatchesAllowedContent } from "@/lib/storage";
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_LOGO_SIZE = 2 * 1024 * 1024; // 2MB
@@ -56,6 +57,12 @@ export async function POST(req: NextRequest) {
     const ext = file.type.split("/")[1] || "png";
     const storagePath = `${schoolProfile.id}/${Date.now()}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
+    if (!fileBufferMatchesAllowedContent(buffer, file.name, "image", file.type)) {
+      return NextResponse.json(
+        { success: false, error: "File content does not match the selected image type" },
+        { status: 400 }
+      );
+    }
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from(LOGO_BUCKET)

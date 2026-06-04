@@ -245,7 +245,7 @@ function SignInForm() {
           </div>
 
           <p className="mt-8 max-w-[380px] font-display text-[22px] font-medium leading-[1.3] tracking-[-0.015em] text-eh-text">
-            "Track every application from applied to hired - without juggling spreadsheets."
+            &quot;Track every application from applied to hired - without juggling spreadsheets.&quot;
           </p>
         </div>
       </div>

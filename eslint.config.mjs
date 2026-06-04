@@ -17,10 +17,9 @@ const config = [
   {
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-empty-object-type": "off",
-      "react/no-unescaped-entities": "off",
-      "@next/next/no-html-link-for-pages": "off",
-      "prefer-const": "off",
+      "@typescript-eslint/no-empty-object-type": "error",
+      "react/no-unescaped-entities": "error",
+      "@next/next/no-html-link-for-pages": "error",
     },
   },
 ];

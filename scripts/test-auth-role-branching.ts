@@ -1,4 +1,4 @@
-import puppeteer from "puppeteer";
+import { launchScriptBrowser } from "./lib/browser";
 
 type CheckResult = {
   name: string;
@@ -10,7 +10,7 @@ const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 const TIMEOUT_MS = 15000;
 
 async function run(): Promise<void> {
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await launchScriptBrowser({ headless: true });
   const page = await browser.newPage();
   page.setDefaultTimeout(TIMEOUT_MS);
 

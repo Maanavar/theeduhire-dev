@@ -17,9 +17,12 @@ interface Resume {
   template?: string;
 }
 
+type QuestionType = "text" | "yes_no" | "rating" | "mcq";
 interface JobScreeningQuestion {
   id: string;
   question: string;
+  questionType?: QuestionType;
+  options?: string[];
   required: boolean;
   sortOrder: number;
 }
@@ -389,24 +392,92 @@ export default function ApplyForm({
               </div>
 
               {hasScreening ? (
-                <div className="mt-4 space-y-4">
+                <div className="mt-4 space-y-5">
                   <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-slate-400">
                     Screening Questions
                   </p>
-                  {screeningQuestions.map((item) => (
-                    <div key={item.id}>
-                      <label className={labelClass}>
-                        {item.question}
-                        {item.required ? <span className="ml-1 text-red-500">*</span> : null}
-                      </label>
-                      <textarea
-                        className={`${inputClass} min-h-[84px] resize-vertical`}
-                        value={screeningAnswers[item.id] || ""}
-                        onChange={(e) => setScreeningAnswers((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                        placeholder={item.required ? "Required" : "Optional"}
-                      />
-                    </div>
-                  ))}
+                  {screeningQuestions.map((item) => {
+                    const qType = item.questionType || "text";
+                    const answer = screeningAnswers[item.id] || "";
+                    const setAnswer = (val: string) => setScreeningAnswers((prev) => ({ ...prev, [item.id]: val }));
+                    return (
+                      <div key={item.id}>
+                        <label className={labelClass}>
+                          {item.question}
+                          {item.required ? <span className="ml-1 text-red-500">*</span> : <span className="ml-1 text-gray-400">(optional)</span>}
+                        </label>
+
+                        {qType === "text" && (
+                          <textarea
+                            className={`${inputClass} min-h-[80px] resize-vertical`}
+                            value={answer}
+                            onChange={(e) => setAnswer(e.target.value)}
+                            placeholder={item.required ? "Your answer (required)" : "Your answer"}
+                          />
+                        )}
+
+                        {qType === "yes_no" && (
+                          <div className="flex gap-3 mt-1">
+                            {["Yes", "No"].map((opt) => (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => setAnswer(opt)}
+                                className={[
+                                  "flex-1 rounded-xl border py-2.5 text-[13px] font-semibold transition-all",
+                                  answer === opt
+                                    ? "border-brand-500 bg-brand-50 text-brand-700"
+                                    : "border-gray-200 bg-white text-gray-600 hover:border-brand-300",
+                                ].join(" ")}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {qType === "rating" && (
+                          <div className="flex items-center gap-2 mt-1">
+                            {[1, 2, 3, 4, 5].map((n) => {
+                              const selected = Number(answer) >= n;
+                              return (
+                                <button
+                                  key={n}
+                                  type="button"
+                                  onClick={() => setAnswer(String(n))}
+                                  className={["text-[24px] transition-transform hover:scale-110", selected ? "text-amber-400" : "text-gray-200"].join(" ")}
+                                  aria-label={`Rate ${n}`}
+                                >
+                                  ★
+                                </button>
+                              );
+                            })}
+                            {answer && <span className="ml-1 text-[12px] text-gray-500">{answer} / 5</span>}
+                          </div>
+                        )}
+
+                        {qType === "mcq" && (
+                          <div className="mt-1 space-y-2">
+                            {(item.options || []).map((opt) => (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => setAnswer(opt)}
+                                className={[
+                                  "w-full text-left rounded-xl border px-4 py-2.5 text-[13px] transition-all",
+                                  answer === opt
+                                    ? "border-brand-500 bg-brand-50 text-brand-700 font-semibold"
+                                    : "border-gray-200 bg-white text-gray-700 hover:border-brand-300",
+                                ].join(" ")}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : null}
             </>

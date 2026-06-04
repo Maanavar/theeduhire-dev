@@ -22,6 +22,18 @@ const generateResumeSchema = z.object({
   template: z.enum(["ats-friendly", "modern", "minimal"]),
 });
 
+const HTML_ESCAPE_LOOKUP: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => HTML_ESCAPE_LOOKUP[char]);
+}
+
 // Template HTML generators
 function generateATSFriendly(profile: any): string {
   return `
@@ -45,23 +57,23 @@ function generateATSFriendly(profile: any): string {
     </head>
     <body>
       <div class="header">
-        <h1>${profile.user.name}</h1>
-        <div class="contact">${profile.user.email}</div>
-        ${profile.user.phone ? `<div class="contact">${profile.user.phone}</div>` : ""}
-        ${profile.city ? `<div class="contact">${profile.city}</div>` : ""}
+        <h1>${escapeHtml(profile.user.name)}</h1>
+        <div class="contact">${escapeHtml(profile.user.email)}</div>
+        ${profile.user.phone ? `<div class="contact">${escapeHtml(profile.user.phone)}</div>` : ""}
+        ${profile.city ? `<div class="contact">${escapeHtml(profile.city)}</div>` : ""}
       </div>
 
       ${profile.bio ? `
         <div class="section">
           <h2>PROFESSIONAL SUMMARY</h2>
-          <p>${profile.bio}</p>
+          <p>${escapeHtml(profile.bio)}</p>
         </div>
       ` : ""}
 
       <div class="section">
         <h2>CORE COMPETENCIES</h2>
         <ul>
-          ${profile.subjects.map((s: string) => `<li>${s}</li>`).join("")}
+          ${profile.subjects.map((s: string) => `<li>${escapeHtml(s)}</li>`).join("")}
         </ul>
       </div>
 
@@ -70,9 +82,9 @@ function generateATSFriendly(profile: any): string {
           <h2>EXPERIENCE</h2>
           ${profile.experiences.map((exp: any) => `
             <div class="job">
-              <div class="job-title">${exp.role} - ${exp.schoolName}</div>
+              <div class="job-title">${escapeHtml(exp.role)} - ${escapeHtml(exp.schoolName)}</div>
               <div class="job-meta">${new Date(exp.startDate).getFullYear()} - ${exp.isCurrent ? 'Present' : new Date(exp.endDate).getFullYear()}</div>
-              ${exp.description ? `<p>${exp.description}</p>` : ""}
+              ${exp.description ? `<p>${escapeHtml(exp.description)}</p>` : ""}
             </div>
           `).join("")}
         </div>
@@ -83,7 +95,7 @@ function generateATSFriendly(profile: any): string {
           <h2>CERTIFICATIONS</h2>
           <ul>
             ${profile.certifications.map((cert: any) => `
-              <li>${cert.name} - ${cert.issuedBy}</li>
+              <li>${escapeHtml(cert.name)} - ${escapeHtml(cert.issuedBy)}</li>
             `).join("")}
           </ul>
         </div>
@@ -91,7 +103,7 @@ function generateATSFriendly(profile: any): string {
 
       <div class="section">
         <h2>QUALIFICATIONS</h2>
-        <p>${profile.qualification || "N/A"}</p>
+        <p>${escapeHtml(profile.qualification || "N/A")}</p>
       </div>
     </body>
     </html>
@@ -123,21 +135,21 @@ function generateModern(profile: any): string {
     <body>
       <div class="container">
         <div class="header">
-          <h1>${profile.user.name}</h1>
-          <div class="contact">${profile.user.email} ${profile.user.phone ? `| ${profile.user.phone}` : ""} ${profile.city ? `| ${profile.city}` : ""}</div>
+          <h1>${escapeHtml(profile.user.name)}</h1>
+          <div class="contact">${escapeHtml(profile.user.email)} ${profile.user.phone ? `| ${escapeHtml(profile.user.phone)}` : ""} ${profile.city ? `| ${escapeHtml(profile.city)}` : ""}</div>
         </div>
 
         ${profile.bio ? `
           <div class="section">
             <h2>About</h2>
-            <p>${profile.bio}</p>
+            <p>${escapeHtml(profile.bio)}</p>
           </div>
         ` : ""}
 
         <div class="section">
           <h2>Expertise</h2>
           <ul>
-            ${profile.subjects.map((s: string) => `<li>${s}</li>`).join("")}
+            ${profile.subjects.map((s: string) => `<li>${escapeHtml(s)}</li>`).join("")}
           </ul>
         </div>
 
@@ -146,9 +158,9 @@ function generateModern(profile: any): string {
             <h2>Experience</h2>
             ${profile.experiences.map((exp: any) => `
               <div class="job">
-                <div class="job-title">${exp.role}</div>
-                <div class="job-meta">${exp.schoolName} | ${new Date(exp.startDate).getFullYear()} - ${exp.isCurrent ? 'Present' : new Date(exp.endDate).getFullYear()}</div>
-                ${exp.description ? `<p style="margin: 8px 0; font-size: 12px;">${exp.description}</p>` : ""}
+                <div class="job-title">${escapeHtml(exp.role)}</div>
+                <div class="job-meta">${escapeHtml(exp.schoolName)} | ${new Date(exp.startDate).getFullYear()} - ${exp.isCurrent ? 'Present' : new Date(exp.endDate).getFullYear()}</div>
+                ${exp.description ? `<p style="margin: 8px 0; font-size: 12px;">${escapeHtml(exp.description)}</p>` : ""}
               </div>
             `).join("")}
           </div>
@@ -159,7 +171,7 @@ function generateModern(profile: any): string {
             <h2>Certifications</h2>
             <ul>
               ${profile.certifications.map((cert: any) => `
-                <li><strong>${cert.name}</strong> - ${cert.issuedBy}</li>
+                <li><strong>${escapeHtml(cert.name)}</strong> - ${escapeHtml(cert.issuedBy)}</li>
               `).join("")}
             </ul>
           </div>
@@ -190,30 +202,30 @@ function generateMinimal(profile: any): string {
       </style>
     </head>
     <body>
-      <h1>${profile.user.name}</h1>
-      <div class="contact">${profile.user.email} ${profile.user.phone ? `/ ${profile.user.phone}` : ""} ${profile.city ? `/ ${profile.city}` : ""}</div>
+      <h1>${escapeHtml(profile.user.name)}</h1>
+      <div class="contact">${escapeHtml(profile.user.email)} ${profile.user.phone ? `/ ${escapeHtml(profile.user.phone)}` : ""} ${profile.city ? `/ ${escapeHtml(profile.city)}` : ""}</div>
 
       ${profile.bio ? `
         <h2>Summary</h2>
-        <p>${profile.bio}</p>
+        <p>${escapeHtml(profile.bio)}</p>
       ` : ""}
 
       <h2>Subjects</h2>
-      <ul>${profile.subjects.map((s: string) => `<li>${s}</li>`).join("")}</ul>
+      <ul>${profile.subjects.map((s: string) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>
 
       ${profile.experiences && profile.experiences.length > 0 ? `
         <h2>Experience</h2>
         ${profile.experiences.map((exp: any) => `
           <div class="job">
-            <div class="job-title">${exp.role}</div>
-            <div class="job-meta">${exp.schoolName} | ${new Date(exp.startDate).getFullYear()}-${exp.isCurrent ? 'now' : new Date(exp.endDate).getFullYear()}</div>
+            <div class="job-title">${escapeHtml(exp.role)}</div>
+            <div class="job-meta">${escapeHtml(exp.schoolName)} | ${new Date(exp.startDate).getFullYear()}-${exp.isCurrent ? 'now' : new Date(exp.endDate).getFullYear()}</div>
           </div>
         `).join("")}
       ` : ""}
 
       ${profile.certifications && profile.certifications.length > 0 ? `
         <h2>Certifications</h2>
-        <ul>${profile.certifications.map((cert: any) => `<li>${cert.name} (${cert.issuedBy})</li>`).join("")}</ul>
+        <ul>${profile.certifications.map((cert: any) => `<li>${escapeHtml(cert.name)} (${escapeHtml(cert.issuedBy)})</li>`).join("")}</ul>
       ` : ""}
     </body>
     </html>

@@ -17,11 +17,6 @@ export async function runProductionHardeningSmoke(baseUrl: string): Promise<Chec
   const smoke = await ensureSmokeData();
   const results: CheckResult[] = [];
 
-  const teacherProfile = await prisma.teacherProfile.findUniqueOrThrow({
-    where: { userId: smoke.teacher.userId },
-    select: { id: true },
-  });
-
   await prisma.teacherProfile.update({
     where: { userId: smoke.teacher.userId },
     data: {

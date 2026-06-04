@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, BarChart3, Lock } from "lucide-react";
+import { ArrowRight, ChevronDown } from "lucide-react";
+import { toast } from "sonner";
 import { SchoolAnalytics as SchoolAnalyticsCharts } from "@/components/dashboard/school-analytics";
-import { EmptyState, ErrorState } from "@/components/system/system-states";
+import { ProLockedState, SomethingWentWrongState, NoJobsPostedState } from "@/components/system/illustrated-states";
 import { AnalyticsSkeleton } from "@/components/system/dashboard-skeletons";
 import type { SchoolAnalytics } from "@/types";
 import { getApiErrorMessage } from "@/lib/api/client";
@@ -27,6 +28,36 @@ export default function SchoolAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [upgradeRequired, setUpgradeRequired] = useState(false);
+  const [dateRange, setDateRange] = useState("Last 30 Days");
+  const [showDateMenu, setShowDateMenu] = useState(false);
+  const dateMenuRef = useRef<HTMLDivElement>(null);
+
+  const DATE_RANGES = ["Last 7 Days", "Last 30 Days", "Last 90 Days", "All Time"];
+
+  const exportReport = () => {
+    if (!analytics) { toast.error("No analytics data to export"); return; }
+    const s = analytics.summary;
+    const rows = [
+      ["Metric", "Value"],
+      ["Total Jobs", String(s.totalJobs)],
+      ["Active Jobs", String(s.activeJobs)],
+      ["Total Applications", String(s.totalApplications)],
+      ["Shortlisted", String(s.shortlisted)],
+      ["Hired", String(s.hired)],
+      ["Avg. Time to Hire (days)", s.avgTimeToHireDays != null ? s.avgTimeToHireDays.toFixed(1) : "N/A"],
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `analytics-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+    toast.success("Report downloaded");
+  };
 
   const loadAnalytics = () => {
     setLoading(true);
@@ -50,77 +81,149 @@ export default function SchoolAnalyticsPage() {
     loadAnalytics();
   }, []);
 
+  useEffect(() => {
+    if (!showDateMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (dateMenuRef.current && !dateMenuRef.current.contains(e.target as Node)) {
+        setShowDateMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showDateMenu]);
+
   return (
     <PageShell>
-      <div className="border-b border-[var(--eh-border)] pb-5">
-        <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.09em] text-[var(--eh-text-4)]">
-          School dashboard
-        </p>
-        <h1 className="text-[24px] font-semibold leading-[1.15] tracking-[-0.022em] text-[var(--eh-text)] sm:text-[26px]">
-          Analytics
-        </h1>
-        <p className="mt-1.5 text-[14px] text-[var(--eh-text-3)]">
-          Hiring funnel, application trend, job performance, and recent activity.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--eh-border)] pb-5">
+        <div>
+          <h1 className="text-[24px] font-semibold leading-[1.15] tracking-[-0.022em] text-[var(--eh-text)] sm:text-[26px]">
+            Analytics
+          </h1>
+          <p className="mt-1.5 text-[14px] text-[var(--eh-text-3)]">
+            Track hiring performance, pipeline health, and job outcomes.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <div className="relative" ref={dateMenuRef}>
+            <button
+              onClick={() => setShowDateMenu((p) => !p)}
+              className="eh-btn eh-btn-secondary"
+            >
+              <span className="text-[var(--eh-text-4)]">📅</span> {dateRange} <ChevronDown size={13} />
+            </button>
+            {showDateMenu && (
+              <div className="absolute right-0 top-full z-20 mt-1 w-[160px] rounded-xl border border-[var(--eh-border)] bg-white py-1 shadow-lg">
+                {DATE_RANGES.map((range) => (
+                  <button
+                    key={range}
+                    onClick={() => { setDateRange(range); setShowDateMenu(false); }}
+                    className={["w-full px-4 py-2 text-left text-[13px] hover:bg-[var(--surface-base)]", range === dateRange ? "font-semibold text-[var(--eh-primary-700)]" : "text-[var(--eh-text-2)]"].join(" ")}
+                  >
+                    {range}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button onClick={exportReport} disabled={!analytics} className="eh-btn eh-btn-secondary">
+            <ArrowRight size={14} className="rotate-90" /> Export Report
+          </button>
+        </div>
       </div>
 
       {loading ? (
         <AnalyticsSkeleton />
       ) : upgradeRequired ? (
-        <div className="flex flex-col items-center justify-center rounded-[24px] border border-[var(--eh-border)] bg-white px-6 py-16 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-brand-50)]">
-            <Lock size={22} className="text-[var(--color-brand-600)]" />
-          </div>
-          <h2 className="mt-4 text-[18px] font-semibold text-[var(--eh-text)]">
-            Analytics is a Pro feature
-          </h2>
-          <p className="mt-2 max-w-sm text-[13.5px] leading-[1.7] text-[var(--eh-text-3)]">
-            Upgrade to the Pro plan to unlock your full hiring funnel — application trends, job performance, time-to-hire, and recent activity.
-          </p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <a
-              href="mailto:hello@theeduhire.in?subject=Upgrade to Pro plan — EduHire Analytics"
-              className="eh-btn eh-btn-primary shadow-[0_4px_14px_rgba(10,102,194,0.2)]"
-            >
-              Upgrade to Pro <ArrowRight size={13} />
-            </a>
-            <Link href="/dashboard/billing" className="eh-btn eh-btn-secondary">
-              View billing
-            </Link>
-          </div>
-          <div className="mt-8 grid grid-cols-2 gap-3 text-left sm:grid-cols-4">
-            {[
-              "Application trend (30 days)",
-              "Job performance comparison",
-              "Hiring funnel (shortlist → hire)",
-              "Time-to-hire average",
-            ].map((feat) => (
-              <div
-                key={feat}
-                className="flex items-start gap-2 rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] px-3 py-3"
-              >
-                <BarChart3 size={13} className="mt-0.5 shrink-0 text-[var(--color-brand-500)]" />
-                <span className="text-[12px] text-[var(--eh-text-2)]">{feat}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : error ? (
-        <ErrorState
-          title="Couldn't load analytics"
-          message={error}
+        <ProLockedState
+          title="Analytics is a Pro feature"
+          message="Upgrade to the Pro plan to unlock your full hiring funnel — application trends, job performance, time-to-hire, and recent activity."
+          features={[
+            "Application trend (30 days)",
+            "Job performance comparison",
+            "Hiring funnel (shortlist → hire)",
+            "Time-to-hire average",
+          ]}
           actions={
-            <button onClick={loadAnalytics} className="eh-btn eh-btn-secondary eh-btn-sm">
-              Retry
-            </button>
+            <>
+              <a
+                href="mailto:hello@theeduhire.in?subject=Upgrade to Pro plan — EduHire Analytics"
+                className="eh-btn eh-btn-primary"
+              >
+                Upgrade to Pro <ArrowRight size={13} />
+              </a>
+              <Link href="/dashboard/billing" className="eh-btn eh-btn-secondary">
+                View billing
+              </Link>
+            </>
           }
         />
+      ) : error ? (
+        <SomethingWentWrongState
+          title="Couldn't load analytics"
+          message={error}
+          onRetry={loadAnalytics}
+        />
       ) : analytics ? (
-        <SchoolAnalyticsCharts data={analytics} />
+        <div className="grid gap-4 xl:grid-cols-[1fr_280px]">
+          <div>
+            {/* Sub-page links */}
+            <div className="mb-4 grid grid-cols-2 gap-3">
+              <Link href="/dashboard/analytics/funnel" className="flex items-center justify-between rounded-xl border border-[var(--eh-border)] bg-white px-4 py-3 hover:border-[var(--eh-border-strong)] hover:shadow-sm transition-all">
+                <div>
+                  <p className="text-[13px] font-semibold text-[var(--eh-text)]">Hiring Funnel Insights</p>
+                  <p className="text-[11px] text-[var(--eh-text-3)]">Conversion, drop-off, bottlenecks</p>
+                </div>
+                <ArrowRight size={14} className="shrink-0 text-[var(--eh-text-4)]" />
+              </Link>
+              <Link href="/dashboard/analytics/job-performance" className="flex items-center justify-between rounded-xl border border-[var(--eh-border)] bg-white px-4 py-3 hover:border-[var(--eh-border-strong)] hover:shadow-sm transition-all">
+                <div>
+                  <p className="text-[13px] font-semibold text-[var(--eh-text)]">Job Performance</p>
+                  <p className="text-[11px] text-[var(--eh-text-3)]">Per-job metrics and match scores</p>
+                </div>
+                <ArrowRight size={14} className="shrink-0 text-[var(--eh-text-4)]" />
+              </Link>
+            </div>
+            <SchoolAnalyticsCharts data={analytics} />
+          </div>
+          <div className="flex flex-col gap-4">
+            {/* Plan Access card */}
+            <div className="rounded-xl border border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[13px] font-semibold text-[var(--eh-text)]">Plan Access</h3>
+                <span className="rounded-md border border-[var(--eh-primary-200)] bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--eh-primary-700)]">PRO</span>
+              </div>
+              <ul className="space-y-2">
+                {["Unlimited job posts", "Managed recruitment access", "Priority support"].map((feat) => (
+                  <li key={feat} className="flex items-center gap-2 text-[12px] text-[var(--eh-text-2)]">
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white text-[10px]">✓</span>
+                    {feat}
+                  </li>
+                ))}
+              </ul>
+              <Link href="/dashboard/billing" className="mt-4 block w-full text-center rounded-lg border border-[var(--eh-primary-200)] bg-white px-3 py-2 text-[12px] font-semibold text-[var(--eh-primary-700)] hover:bg-[var(--eh-primary-50)] transition-colors">
+                View Plan Details
+              </Link>
+            </div>
+            {/* Upgrade CTA */}
+            <div className="rounded-xl border border-[var(--eh-border)] bg-white p-5">
+              <p className="text-[13px] font-semibold text-[var(--eh-text)] mb-1">Need more hiring power?</p>
+              <p className="text-[12px] text-[var(--eh-text-3)] leading-[1.6] mb-3">Upgrade your plan to post more jobs, access advanced features, and hire better, faster.</p>
+              <ul className="space-y-1.5 mb-4">
+                {["Post more active jobs", "Unlock managed recruitment discounts", "Priority support & faster response"].map((feat) => (
+                  <li key={feat} className="flex items-center gap-1.5 text-[12px] text-[var(--eh-text-3)]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--eh-primary-500)] shrink-0" /> {feat}
+                  </li>
+                ))}
+              </ul>
+              <Link href="/dashboard/billing" className="eh-btn eh-btn-primary w-full justify-center">Upgrade Now</Link>
+            </div>
+          </div>
+        </div>
       ) : (
-        <EmptyState
-          title="No analytics yet"
-          message="Post jobs and review applicants to start seeing funnel and performance insights."
+        <NoJobsPostedState
+          actions={
+            <Link href="/dashboard/post-job" className="eh-btn eh-btn-primary">Post a Job</Link>
+          }
         />
       )}
     </PageShell>

@@ -56,15 +56,18 @@ export function updateJob(jobId: string, payload: Omit<JobUpsertPayload, "status
 
 export function improveJobWithAi(payload: {
   title: string;
-  description: string;
-  requirements: string;
-  benefits: string;
+  subject: string;
+  gradeLevel: string;
+  board: string;
+  experience?: string;
+  description?: string;
+  requirements?: string;
+  benefits?: string;
 }) {
   return apiRequest<{
-    title?: string;
-    description?: string;
-    requirements?: string;
-    benefits?: string;
+    description: string;
+    requirements: string[];
+    benefits: string[];
   }>(
     "/api/ai/improve-job",
     {

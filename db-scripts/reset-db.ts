@@ -1,9 +1,11 @@
 import { PrismaClient } from "@prisma/client";
+import { assertDestructiveDbScriptAllowed } from "../scripts/lib/script-safety";
 
 const prisma = new PrismaClient();
 
 async function resetDatabase() {
   try {
+    assertDestructiveDbScriptAllowed("db-scripts/reset-db.ts");
     console.log("🗑️  Starting database reset...\n");
 
     // Delete in order of dependencies (respecting foreign keys)

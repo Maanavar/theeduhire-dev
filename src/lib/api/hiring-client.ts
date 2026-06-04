@@ -240,7 +240,7 @@ export function getRankedCandidates(
     string,
     RankedCandidatesPage["pagination"] extends infer TPagination
       ? { pagination?: TPagination }
-      : {}
+      : Record<string, never>
   >(
     `/api/jobs/${jobId}/candidates/ranked${query ? `?${query}` : ""}`,
     undefined,

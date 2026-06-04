@@ -7,6 +7,7 @@ import {
   PrismaClient,
 } from "@prisma/client";
 import { hash } from "bcryptjs";
+import { assertSmokeDataScriptAllowed } from "./script-safety";
 
 const prisma = new PrismaClient();
 
@@ -81,6 +82,8 @@ export type SmokeData = {
 let cachedSmokeData: SmokeData | null = null;
 
 export async function ensureSmokeData(): Promise<SmokeData> {
+  assertSmokeDataScriptAllowed("scripts/lib/smoke-data.ts");
+
   if (cachedSmokeData) {
     return cachedSmokeData;
   }

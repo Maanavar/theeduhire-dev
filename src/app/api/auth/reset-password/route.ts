@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getClientIp, hashOpaqueToken, hashPassword } from "@/lib/security";
+import { getClientIp, hashOpaqueToken, hashPassword, validatePasswordStrength } from "@/lib/security";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { PASSWORD_RESET_IP_LIMIT, PASSWORD_RESET_RATE_LIMIT_WINDOW_MS } from "@/config/constants";
+import { revokeUserSessions } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,13 +13,6 @@ export async function POST(req: NextRequest) {
     if (!token || !newPassword) {
       return NextResponse.json(
         { error: "Token and password are required" },
-        { status: 400 }
-      );
-    }
-
-    if (newPassword.length < 8) {
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters" },
         { status: 400 }
       );
     }
@@ -46,7 +40,7 @@ export async function POST(req: NextRequest) {
           gt: new Date(),
         },
       },
-      select: { id: true, email: true },
+      select: { id: true, email: true, name: true },
     });
 
     if (!user) {
@@ -54,6 +48,11 @@ export async function POST(req: NextRequest) {
         { error: "Reset link is invalid or has expired" },
         { status: 400 }
       );
+    }
+
+    const passwordError = validatePasswordStrength(newPassword, { email: user.email, name: user.name });
+    if (passwordError) {
+      return NextResponse.json({ error: passwordError }, { status: 400 });
     }
 
     const hashedPassword = await hashPassword(newPassword);
@@ -111,6 +110,8 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    await revokeUserSessions(user.id);
 
     return NextResponse.json(
       { success: true, message: "Password reset successfully" },

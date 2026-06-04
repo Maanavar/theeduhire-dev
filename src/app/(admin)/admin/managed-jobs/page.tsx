@@ -630,7 +630,7 @@ function JobFormDrawer({ form, setField, saving, editTarget, offlineSchools, onC
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 shrink-0">
           <div>
             <h2 className="text-[17px] font-bold tracking-[-0.02em] text-gray-900">{editTarget ? "Edit managed job" : "Post managed job"}</h2>
-            <p className="text-[12.5px] text-gray-500 mt-0.5">Job posted by EduHire ops on school's behalf</p>
+            <p className="text-[12.5px] text-gray-500 mt-0.5">Job posted by EduHire ops on school&apos;s behalf</p>
           </div>
           <button onClick={onClose} disabled={saving} className="flex h-8 w-8 items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 disabled:opacity-40">
             <X size={15} />

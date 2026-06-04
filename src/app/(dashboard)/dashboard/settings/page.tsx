@@ -5,7 +5,6 @@ import Link from "next/link";
 import { PageHeader, PageShell, SectionCard } from "@/components/layout/page-shell";
 import { ErrorState, LoadingState } from "@/components/system/system-states";
 import { trackEvent } from "@/lib/analytics";
-import { featureFlags } from "@/config/feature-flags";
 import { toast } from "sonner";
 
 type SessionItem = {
@@ -22,7 +21,6 @@ export default function SettingsSecurityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [sessions, setSessions] = useState<SessionItem[]>([]);
-  const [twoFA, setTwoFA] = useState<{ enabled: boolean; available?: boolean; message?: string } | null>(null);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -32,22 +30,10 @@ export default function SettingsSecurityPage() {
     setLoading(true);
     setError("");
     try {
-      const requestList = [
-        fetch("/api/settings/security/sessions"),
-        featureFlags.twoFactorAuth ? fetch("/api/settings/security/2fa") : Promise.resolve(null),
-      ] as const;
-
-      const [sessionRes, twoFaRes] = await Promise.all(requestList);
-      const [sessionData, twoFaData] = await Promise.all([
-        sessionRes.json(),
-        twoFaRes ? twoFaRes.json() : Promise.resolve({ success: true, data: null }),
-      ]);
+      const sessionRes = await fetch("/api/settings/security/sessions");
+      const sessionData = await sessionRes.json();
       if (!sessionData.success) throw new Error(sessionData.error || "Failed to load sessions");
-      if (featureFlags.twoFactorAuth && !twoFaData.success) {
-        throw new Error(twoFaData.error || "Failed to load 2FA state");
-      }
       setSessions(sessionData.data);
-      setTwoFA(featureFlags.twoFactorAuth ? twoFaData.data : null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load settings");
     } finally {
@@ -114,17 +100,6 @@ export default function SettingsSecurityPage() {
     }
   };
 
-  const bootstrap2FA = async () => {
-    const res = await fetch("/api/settings/security/2fa", { method: "POST" });
-    const data = await res.json();
-    if (data.success && data.data?.available !== false) {
-      toast.success(data.data?.status || "2FA setup initialized");
-      loadSecurity();
-    } else {
-      toast.error(data?.data?.status || data.error || "2FA is not available yet");
-    }
-  };
-
   return (
     <PageShell>
       <PageHeader title="Settings" subtitle="Manage account and security settings." />
@@ -179,27 +154,6 @@ export default function SettingsSecurityPage() {
                       </div>
                     ))}
                   </div>
-                )}
-              </SectionCard>
-
-              <SectionCard className="p-4 space-y-2">
-                <h3 className="text-sm font-semibold text-gray-900">Two-Factor Authentication</h3>
-                {!featureFlags.twoFactorAuth ? (
-                  <p className="text-sm text-amber-700">Two-factor authentication is currently disabled in this environment.</p>
-                ) : (
-                  <>
-                    <p className="text-sm text-gray-600">Status: {twoFA?.enabled ? "Enabled" : "Not enabled"}</p>
-                    {twoFA?.available === false ? (
-                      <p className="text-xs text-amber-700">{twoFA.message || "2FA is not available yet."}</p>
-                    ) : null}
-                    <button
-                      onClick={bootstrap2FA}
-                      disabled={twoFA?.available === false}
-                      className="rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {twoFA?.enabled ? "Regenerate recovery setup" : "Initialize 2FA setup"}
-                    </button>
-                  </>
                 )}
               </SectionCard>
             </div>

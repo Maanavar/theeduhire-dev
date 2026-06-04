@@ -2,18 +2,12 @@
 // Background job to send daily/weekly alert digests
 // Should be called by a cron job (e.g., 8 AM daily)
 // For testing: can be called manually
-// No auth required (call from backend/cron only)
+// Secured with CRON_SECRET.
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendJobAlertDigest } from "@/lib/email";
-
-const CRON_SECRET = process.env.CRON_SECRET;
-
-function isCronAuthorized(req: NextRequest): boolean {
-  if (!CRON_SECRET) return false;
-  return req.headers.get("x-cron-secret") === CRON_SECRET;
-}
+import { isCronAuthorized } from "@/lib/cron-auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -143,4 +137,8 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return POST(req);
 }

@@ -3,14 +3,12 @@
 // Comprehensive database seed for Phase 4 testing
 // Run: npx tsx scripts/seed-phase4.ts
 
-import { PrismaClient, Board, JobType, AvailabilityStatus } from "@prisma/client";
+import { PrismaClient, Board, JobType } from "@prisma/client";
 import { hash } from "bcryptjs";
+import { assertDestructiveDbScriptAllowed, getRequiredScriptPassword } from "./lib/script-safety";
 
 const prisma = new PrismaClient();
-const SEED_PASSWORD = process.env.SEED_DEFAULT_PASSWORD?.trim() || "";
-if (!SEED_PASSWORD || SEED_PASSWORD.length < 8) {
-  throw new Error("SEED_DEFAULT_PASSWORD must be set and at least 8 characters long.");
-}
+const SEED_PASSWORD = getRequiredScriptPassword("SEED_DEFAULT_PASSWORD");
 
 // Test data
 const SCHOOLS = [
@@ -506,6 +504,7 @@ async function seedApplications(teachers: any[], jobs: any[]) {
 
 async function main() {
   try {
+    assertDestructiveDbScriptAllowed("scripts/seed-phase4.ts");
     console.log("-----------------------------------------------");
     console.log("     Phase 4 Database Seed Script ");
     console.log("-----------------------------------------------\n");

@@ -1,10 +1,12 @@
 import { PrismaClient } from "@prisma/client";
 import { hash } from "bcryptjs";
+import { assertDestructiveDbScriptAllowed, getRequiredScriptPassword } from "../scripts/lib/script-safety";
 
 const prisma = new PrismaClient();
-const NEW_PASSWORD = "EduHire@123";
+const NEW_PASSWORD = getRequiredScriptPassword("RESET_PASSWORD");
 
 async function main() {
+  assertDestructiveDbScriptAllowed("db-scripts/reset-passwords.ts");
   const hashed = await hash(NEW_PASSWORD, 12);
 
   const users = await prisma.user.findMany({
@@ -20,7 +22,7 @@ async function main() {
     console.log(`Reset: ${user.email} (${user.role})`);
   }
 
-  console.log(`\nDone — ${users.length} accounts reset to: ${NEW_PASSWORD}`);
+  console.log(`\nDone — ${users.length} accounts reset.`);
 }
 
 main()

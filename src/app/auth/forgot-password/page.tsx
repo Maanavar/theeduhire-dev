@@ -131,7 +131,7 @@ function ForgotPasswordForm() {
                   Reset your password
                 </h1>
                 <p className="text-sm text-gray-500 leading-relaxed">
-                  Enter your email and we'll send you a link to reset it
+                  Enter your email and we&apos;ll send you a link to reset it
                 </p>
               </div>
 

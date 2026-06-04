@@ -23,15 +23,24 @@ export async function GET() {
       where: { postedBy: auth.user.id },
       select: {
         id: true, title: true, subject: true, board: true, gradeLevel: true,
-        jobType: true, experience: true, salaryMin: true, salaryMax: true,
+        jobType: true, experience: true, experienceLevel: true,
+        salaryMin: true, salaryMax: true,
+        isUrgent: true, requiredWithin48h: true, requiresTet: true,
+        applicationDeadline: true,
         postedAt: true, expiresAt: true, status: true,
         school: { select: { schoolName: true, city: true, verified: true, logoUrl: true } },
         _count: { select: { applications: true } },
+        applications: { select: { status: true } },
       },
       orderBy: { postedAt: "desc" },
     });
 
-    return NextResponse.json({ success: true, data: jobs });
+    const result = jobs.map(({ applications, ...job }) => ({
+      ...job,
+      shortlistedCount: applications.filter((a) => ["SHORTLISTED", "INTERVIEW_SCHEDULED", "INTERVIEW_COMPLETED", "HIRED"].includes(a.status)).length,
+    }));
+
+    return NextResponse.json({ success: true, data: result });
   } catch (error) {
     console.error("GET /api/my-jobs error:", error);
     return NextResponse.json({ success: false, error: "Failed to fetch your jobs" }, { status: 500 });

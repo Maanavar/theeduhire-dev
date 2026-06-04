@@ -15,7 +15,17 @@
       "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\senth\\\\OneDrive\\\\文档\\\\GitHub\\\\theeduhire-dev\\\\src\\\\app\\\\\\(public\\)\" -Recurse -Force | Sort-Object FullName | ForEach-Object { $_.FullName -replace [regex]::Escape\\(\"c:\\\\Users\\\\senth\\\\OneDrive\\\\文档\\\\GitHub\\\\theeduhire-dev\\\\\"\\), \"\" })",
       "Bash(dir src\\\\app)",
       "Bash(Remove-Item \"c:\\\\Users\\\\senth\\\\OneDrive\\\\문서\\\\GitHub\\\\theeduhire-dev\\\\src\\\\app\\\\\\(public\\)\\\\contact\\\\page.tsx\" -Force)",
-      "Bash(npx tsx *)"
+      "Bash(npx tsx *)",
+      "Read(//c/Users/senth/OneDrive/**)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\senth\\\\OneDrive\\\\文서\\\\GitHub\\\\theeduhire-dev\\\\src\\\\app\" -Directory | ForEach-Object { $_.FullName })",
+      "Bash(find /c/Users/senth -name \"layout.tsx\" -path \"*/dashboard*\" 2>/dev/null | head -5)",
+      "Read(//c/Users/senth/**)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\senth\\\\OneDrive\\\\文档\\\\GitHub\\\\theeduhire-dev\\\\src\\\\components\\\\layout\" -File)",
+      "Bash(curl -s http://localhost:3001)",
+      "Bash(npx playwright *)",
+      "Bash(git stash *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

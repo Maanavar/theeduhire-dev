@@ -11,6 +11,7 @@ import {
 import {
   createStorageObjectRef,
   ensureBucket,
+  fileBufferMatchesAllowedContent,
   fileMatchesAllowedTypes,
   getFileExtension,
   getTeacherDocumentAccessPath,
@@ -49,6 +50,12 @@ export async function POST(req: NextRequest) {
     const ext = getFileExtension(file.name) || "mp4";
     const storagePath = `${auth.user.id}/${Date.now()}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
+    if (!fileBufferMatchesAllowedContent(buffer, file.name, "demo-video", file.type)) {
+      return NextResponse.json(
+        { success: false, error: "File content does not match the selected video type" },
+        { status: 400 }
+      );
+    }
     const contentType = ALLOWED_DEMO_VIDEO_TYPES.includes(file.type) ? file.type : `video/${ext === "mov" ? "quicktime" : ext}`;
 
     const { error: uploadError } = await supabaseAdmin.storage

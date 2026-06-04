@@ -11,6 +11,7 @@ import {
 import {
   createStorageObjectRef,
   ensureBucket,
+  fileBufferMatchesAllowedContent,
   fileMatchesAllowedTypes,
   getFileExtension,
   getTeacherDocumentAccessPath,
@@ -49,6 +50,12 @@ export async function POST(req: NextRequest) {
     const ext = getFileExtension(file.name) || "pdf";
     const storagePath = `${auth.user.id}/${Date.now()}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
+    if (!fileBufferMatchesAllowedContent(buffer, file.name, "document", file.type)) {
+      return NextResponse.json(
+        { success: false, error: "File content does not match the selected document type" },
+        { status: 400 }
+      );
+    }
     const contentType = ALLOWED_LESSON_PLAN_TYPES.includes(file.type)
       ? file.type
       : ext === "doc"

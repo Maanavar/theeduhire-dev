@@ -224,7 +224,7 @@ export default function NotificationBell({ href = "/dashboard/notifications" }: 
             ) : items.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-10">
                 <Bell size={24} className="text-[var(--eh-text-4)]" />
-                <p className="text-[13px] font-medium text-[var(--eh-text-3)]">You're all caught up</p>
+                <p className="text-[13px] font-medium text-[var(--eh-text-3)]">You&apos;re all caught up</p>
                 <p className="text-[12px] text-[var(--eh-text-4)]">New notifications will appear here.</p>
               </div>
             ) : (

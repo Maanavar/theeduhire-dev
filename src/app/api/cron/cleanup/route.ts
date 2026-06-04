@@ -4,13 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-const CRON_SECRET = process.env.CRON_SECRET;
-
-function isCronAuthorized(req: NextRequest): boolean {
-  if (!CRON_SECRET) return false;
-  return req.headers.get("x-cron-secret") === CRON_SECRET;
-}
+import { isCronAuthorized } from "@/lib/cron-auth";
 
 export async function POST(req: NextRequest) {
   if (!isCronAuthorized(req)) {

@@ -497,7 +497,7 @@ export function TeacherCredentialsSection({
             <p className="mt-2">
               Keep all teacher-student interactions age-appropriate,
               documented, and aligned with school child-protection policy. Any
-              concern must be reported through the school's safeguarding
+              concern must be reported through the school&apos;s safeguarding
               channel immediately.
             </p>
           </details>

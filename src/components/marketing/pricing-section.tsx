@@ -311,10 +311,10 @@ export function PricingSection() {
                     </span>
                   </div>
                   <h3 className="mt-3 font-display text-[1.5rem] font-semibold tracking-[-0.03em]">
-                    Don't have time to hire? We do it for you.
+                    Don&apos;t have time to hire? We do it for you.
                   </h3>
                   <p className="mt-2.5 text-[14px] leading-[1.75] text-white/60">
-                    Submit your JD. Our team sources, screens, and shortlists qualified teachers from EduHire's verified pool. You interview and confirm. Pay ₹10,000 only on a successful hire.
+                    Submit your JD. Our team sources, screens, and shortlists qualified teachers from EduHire&apos;s verified pool. You interview and confirm. Pay ₹10,000 only on a successful hire.
                   </p>
                   <div className="mt-5 flex flex-wrap gap-3">
                     {[

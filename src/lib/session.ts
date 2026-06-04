@@ -54,3 +54,17 @@ export async function requireAuth(allowedRoles?: UserRole[]) {
 
   return { user: session.user };
 }
+
+export async function revokeUserSessions(userId: string, options: { exceptSessionToken?: string | null } = {}) {
+  const db = prisma as any;
+  const exceptSessionToken = options.exceptSessionToken || null;
+
+  return db.userSession.updateMany({
+    where: {
+      userId,
+      revokedAt: null,
+      ...(exceptSessionToken ? { sessionToken: { not: exceptSessionToken } } : {}),
+    },
+    data: { revokedAt: new Date() },
+  });
+}

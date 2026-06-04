@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatSalary, timeAgo } from "@/lib/utils";
 import { getSession } from "@/lib/session";
+import { canViewJobWithModeration } from "@/lib/policies/job-policy";
 import Link from "next/link";
 import JobDetailApplyRail from "@/components/jobs/job-detail-apply-rail";
 import {
@@ -36,10 +37,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const job = await prisma.jobPosting.findUnique({
     where: { id },
-    include: { school: { select: { schoolName: true, city: true, board: true } } },
+    include: {
+      school: {
+        select: {
+          schoolName: true,
+          city: true,
+          board: true,
+          isOfflineManaged: true,
+          user: { select: { isSuspended: true } },
+        },
+      },
+    },
   });
 
-  if (!job) return { title: "Job Not Found" };
+  if (!job || !canViewJobWithModeration(job)) return { title: "Job Not Found" };
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://theeduhire.in";
   const canonicalUrl = `${baseUrl}/jobs/${id}`;
@@ -93,7 +104,11 @@ export default async function JobDetailPage({ params, searchParams }: Props) {
   const job = await prisma.jobPosting.findUnique({
     where: { id },
     include: {
-      school: true,
+      school: {
+        include: {
+          user: { select: { isSuspended: true } },
+        },
+      },
       requirements: { orderBy: { sortOrder: "asc" } },
       benefits: { orderBy: { sortOrder: "asc" } },
       screeningQuestions: { orderBy: { sortOrder: "asc" } },
@@ -102,6 +117,7 @@ export default async function JobDetailPage({ params, searchParams }: Props) {
   });
 
   if (!job) notFound();
+  if (!canViewJobWithModeration(job, session?.user)) notFound();
 
   if (job.status === "ACTIVE" && job.expiresAt && job.expiresAt.getTime() <= Date.now()) {
     await prisma.jobPosting.updateMany({
@@ -118,12 +134,13 @@ export default async function JobDetailPage({ params, searchParams }: Props) {
   }
 
   let isApplied = false;
+  let appliedAt: string | undefined;
   let isSaved = false;
   if (session?.user) {
     const [application, saved] = await Promise.all([
       prisma.application.findUnique({
         where: { jobId_applicantId: { jobId: job.id, applicantId: session.user.id } },
-        select: { id: true },
+        select: { id: true, createdAt: true },
       }),
       prisma.savedJob.findUnique({
         where: { userId_jobId: { userId: session.user.id, jobId: job.id } },
@@ -131,6 +148,7 @@ export default async function JobDetailPage({ params, searchParams }: Props) {
       }),
     ]);
     isApplied = !!application;
+    appliedAt = application?.createdAt?.toISOString();
     isSaved = !!saved;
   }
 
@@ -452,6 +470,9 @@ export default async function JobDetailPage({ params, searchParams }: Props) {
             screeningQuestions={job.screeningQuestions}
             initialApplied={isApplied}
             initialSaved={isSaved}
+            jobStatus={(job as any).status as string}
+            appliedAt={appliedAt}
+            hasProfile={!!session?.user}
           />
         </div>
       </section>

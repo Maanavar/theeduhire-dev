@@ -12,7 +12,6 @@ export async function GET() {
         password: "/api/settings/security/password",
         sessions: "/api/settings/security/sessions",
         revokeSession: "/api/settings/security/sessions/revoke",
-        twoFactor: "/api/settings/security/2fa",
       },
     },
   });

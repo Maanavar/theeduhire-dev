@@ -11,4 +11,3 @@ node_modules/
 *.pfx
 *.tsbuildinfo
 next-env.d.ts
-prisma/migrations/

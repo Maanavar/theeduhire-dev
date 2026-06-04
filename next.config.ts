@@ -24,12 +24,17 @@ function buildContentSecurityPolicy() {
     "frame-ancestors 'none'",
     "object-src 'none'",
     `script-src 'self' 'unsafe-inline' ${isProduction ? "" : "'unsafe-eval'"} ${posthogOrigins.apiOrigin} ${posthogOrigins.assetOrigin}`,
+    "script-src-attr 'none'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://*.supabase.co https://ui-avatars.com",
+    "style-src-attr 'unsafe-inline'",
+    "img-src 'self' data: blob: https://*.supabase.co https://ui-avatars.com https://i.pravatar.cc",
     "font-src 'self' data:",
     "media-src 'self' blob: https://*.supabase.co",
     `connect-src 'self' https://*.supabase.co ${posthogOrigins.apiOrigin} ${posthogOrigins.assetOrigin}`,
-    "frame-src 'self'",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+    "frame-src 'none'",
+    "child-src 'none'",
     isProduction ? "upgrade-insecure-requests" : "",
   ]
     .filter(Boolean)
@@ -46,6 +51,10 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "ui-avatars.com",
+      },
+      {
+        protocol: "https",
+        hostname: "i.pravatar.cc",
       },
     ],
   },

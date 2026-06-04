@@ -12,12 +12,10 @@ import {
 } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { calculateProfileCompletion } from "../src/lib/profileCompletion";
+import { assertDestructiveDbScriptAllowed, getRequiredScriptPassword } from "./lib/script-safety";
 
 const prisma = new PrismaClient();
-const PASSWORD = process.env.SEED_DEFAULT_PASSWORD?.trim() || "";
-if (!PASSWORD || PASSWORD.length < 8) {
-  throw new Error("SEED_DEFAULT_PASSWORD must be set and at least 8 characters long.");
-}
+const PASSWORD = getRequiredScriptPassword("SEED_DEFAULT_PASSWORD");
 const NOW = new Date();
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RESUME_URL = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
@@ -1153,6 +1151,7 @@ async function validateDataset() {
 // ─────────────────────────────────────────────
 
 async function main() {
+  assertDestructiveDbScriptAllowed("scripts/reseed-demo-data.ts");
   console.log("EduHire — Full Reseed\n");
   const hashedPassword = await hash(PASSWORD, 10);
 

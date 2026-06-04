@@ -83,52 +83,52 @@
 }
 
 .app-linkedin {
-  --eh-primary-50: #eef3f8;
-  --eh-primary-100: #dce6f1;
-  --eh-primary-200: #bed3e8;
-  --eh-primary-300: #94b9db;
-  --eh-primary-400: #5f9bd0;
-  --eh-primary-500: #0a66c2;
-  --eh-primary-600: #0a66c2;
-  --eh-primary-700: #004182;
-  --eh-primary-800: #083b73;
-  --eh-primary-900: #062d58;
-  --eh-bg: #f4f2ee;
-  --eh-bg-soft: #f4f2ee;
-  --eh-bg-mute: #eef3f8;
+  --eh-primary-50: #eef2ff;
+  --eh-primary-100: #e0e7ff;
+  --eh-primary-200: #c7d2fe;
+  --eh-primary-300: #a5b4fc;
+  --eh-primary-400: #818cf8;
+  --eh-primary-500: #4f46e5;
+  --eh-primary-600: #4f46e5;
+  --eh-primary-700: #3730a3;
+  --eh-primary-800: #312e81;
+  --eh-primary-900: #1e1b4b;
+  --eh-bg: #f5f6fa;
+  --eh-bg-soft: #f5f6fa;
+  --eh-bg-mute: #eef0f7;
   --eh-surface: #ffffff;
-  --eh-border: #d7dce2;
-  --eh-border-strong: #bfc7d1;
-  --eh-text: #191919;
-  --eh-text-2: #38434f;
-  --eh-text-3: #5f6b7a;
-  --eh-text-4: #7a8694;
-  --eh-success: #057642;
-  --eh-success-bg: #edf8f3;
-  --eh-success-border: #bfe3cf;
-  --eh-warning: #915907;
-  --eh-warning-bg: #fff7e6;
-  --eh-warning-border: #f2d6a6;
-  --eh-danger: #c0372b;
-  --eh-danger-bg: #fdf0ee;
-  --eh-danger-border: #f3c7c2;
-  --eh-info: #0a66c2;
-  --eh-info-bg: #eef3f8;
-  --eh-info-border: #bed3e8;
+  --eh-border: #e4e7ef;
+  --eh-border-strong: #cdd2e0;
+  --eh-text: #111827;
+  --eh-text-2: #374151;
+  --eh-text-3: #6b7280;
+  --eh-text-4: #9ca3af;
+  --eh-success: #059669;
+  --eh-success-bg: #ecfdf5;
+  --eh-success-border: #a7f3d0;
+  --eh-warning: #d97706;
+  --eh-warning-bg: #fffbeb;
+  --eh-warning-border: #fde68a;
+  --eh-danger: #dc2626;
+  --eh-danger-bg: #fef2f2;
+  --eh-danger-border: #fecaca;
+  --eh-info: #4f46e5;
+  --eh-info-bg: #eef2ff;
+  --eh-info-border: #c7d2fe;
   --eh-font-display: "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 
-  --color-brand-50: #eef3f8;
-  --color-brand-100: #dce6f1;
-  --color-brand-200: #bed3e8;
-  --color-brand-300: #94b9db;
-  --color-brand-400: #5f9bd0;
-  --color-brand-500: #0a66c2;
-  --color-brand-600: #004182;
-  --color-brand-700: #083b73;
-  --color-brand-800: #062d58;
-  --color-brand-900: #041f3d;
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #4f46e5;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #3730a3;
+  --color-brand-800: #312e81;
+  --color-brand-900: #1e1b4b;
 
-  --surface-base: #f4f2ee;
+  --surface-base: #f5f6fa;
   --surface-raised: #ffffff;
   --surface-glass: rgba(255,255,255,0.86);
   --surface-overlay: rgba(255,255,255,0.94);
@@ -145,7 +145,7 @@
   --shadow-xl: 0 22px 48px rgba(15, 23, 42, 0.1);
   --shadow-2xl: 0 28px 60px rgba(15, 23, 42, 0.12);
   --shadow-glass: 0 12px 30px rgba(15, 23, 42, 0.08);
-  --shadow-brand: 0 8px 20px rgba(10, 102, 194, 0.18);
+  --shadow-brand: 0 8px 20px rgba(79, 70, 229, 0.22);
   --shadow-inner: inset 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
@@ -383,12 +383,12 @@
 
 /* ─── Brand gradient utility ─── */
 .bg-brand-gradient {
-  background: linear-gradient(135deg, #0a66c2 0%, #004182 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
 }
 
 /* Shadow brand-lg utility */
 .shadow-brand-lg {
-  box-shadow: 0 16px 40px rgba(10,102,194,0.22);
+  box-shadow: 0 16px 40px rgba(79,70,229,0.25);
 }
 
 /* ─── EduHire Design System Components ─── */
@@ -1017,4 +1017,155 @@
   bottom: 0;
   background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.38) 100%);
   opacity: 0.45;
+}
+
+/* ─── Dropdown / Popover Animations ─────────────────────────────────────── */
+
+@keyframes dropdownIn {
+  from { opacity: 0; transform: scale3d(0.96, 0.96, 1) translateY(-4px); }
+  to   { opacity: 1; transform: scale3d(1, 1, 1) translateY(0); }
+}
+@keyframes dropdownOut {
+  from { opacity: 1; transform: scale3d(1, 1, 1) translateY(0); }
+  to   { opacity: 0; transform: scale3d(0.96, 0.96, 1) translateY(-4px); }
+}
+@keyframes slideInFromRight {
+  from { opacity: 0; transform: translate3d(24px, 0, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes slideInFromBottom {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes panelSlideIn {
+  from { opacity: 0; transform: translate3d(20px, 0, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+.animate-dropdown-in    { animation: dropdownIn 160ms var(--ease-out) both; }
+.animate-slide-from-right { animation: slideInFromRight 200ms var(--ease-out) both; }
+.animate-slide-from-bottom { animation: slideInFromBottom 180ms var(--ease-out) both; }
+.animate-panel-slide-in { animation: panelSlideIn 220ms var(--ease-out) both; }
+.animate-overlay-in     { animation: overlayIn 180ms var(--ease-smooth) both; }
+
+/* ─── Styled Select Wrapper ──────────────────────────────────────────────── */
+
+/* Wrap any <select> in .eh-select-wrap to get a styled chevron + remove browser arrow */
+.eh-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.eh-select-wrap select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+}
+.eh-select-wrap::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--eh-text-3);
+  pointer-events: none;
+  transition: transform 150ms var(--ease-smooth), border-top-color 150ms ease;
+}
+.eh-select-wrap:focus-within::after {
+  border-top-color: var(--color-brand-500);
+}
+.eh-select-wrap.w-full { display: flex; }
+.eh-select-wrap.w-full select { width: 100%; }
+
+/* ─── Context Menu / Popover ─────────────────────────────────────────────── */
+
+.eh-popover {
+  background: var(--eh-surface);
+  border: 1px solid var(--eh-border);
+  border-radius: 14px;
+  box-shadow: 0 4px 24px rgba(15,23,42,0.10), 0 1px 4px rgba(15,23,42,0.06);
+  padding: 4px;
+  animation: dropdownIn 160ms var(--ease-out) both;
+  transform-origin: top right;
+}
+.eh-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--eh-text-2);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 100ms ease, color 100ms ease;
+  white-space: nowrap;
+}
+.eh-popover-item:hover {
+  background: var(--surface-base);
+  color: var(--eh-text);
+}
+.eh-popover-item.danger { color: var(--eh-danger); }
+.eh-popover-item.danger:hover { background: var(--eh-danger-bg); }
+.eh-popover-divider {
+  height: 1px;
+  background: var(--eh-border);
+  margin: 3px 4px;
+}
+
+/* ─── Tab Indicator (animated sliding underline) ─────────────────────────── */
+
+.eh-tabs {
+  position: relative;
+  display: flex;
+}
+.eh-tabs-indicator {
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  background: var(--eh-primary-600);
+  border-radius: 2px 2px 0 0;
+  transition: left 200ms var(--ease-out), width 200ms var(--ease-out);
+  pointer-events: none;
+}
+
+/* ─── Smooth Row / List Item Transitions ─────────────────────────────────── */
+
+.eh-list-item-enter {
+  animation: slideInFromBottom 200ms var(--ease-out) both;
+}
+
+/* ─── Sidebar Nav Active State ───────────────────────────────────────────── */
+
+.eh-nav-item {
+  position: relative;
+  transition: background 150ms ease, color 150ms ease;
+}
+.eh-nav-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scaleY(0);
+  width: 3px;
+  height: 60%;
+  background: var(--eh-primary-600);
+  border-radius: 0 3px 3px 0;
+  transition: transform 180ms var(--ease-spring);
+}
+.eh-nav-item.active::before {
+  transform: translateY(-50%) scaleY(1);
 }

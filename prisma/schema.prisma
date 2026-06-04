@@ -421,13 +421,15 @@ model JobBenefit {
 }
 
 model ScreeningQuestion {
-  id        String  @id @default(uuid()) @db.Uuid
-  jobId     String  @map("job_id") @db.Uuid
-  question  String  @db.Text
-  required  Boolean @default(false)
-  sortOrder Int     @default(0) @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id           String   @id @default(uuid()) @db.Uuid
+  jobId        String   @map("job_id") @db.Uuid
+  question     String   @db.Text
+  questionType String   @default("text") @map("question_type") // text | yes_no | rating | mcq
+  options      String[] @default([])                            // MCQ choices
+  required     Boolean  @default(false)
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   job     JobPosting        @relation(fields: [jobId], references: [id], onDelete: Cascade)
   answers ScreeningAnswer[]
