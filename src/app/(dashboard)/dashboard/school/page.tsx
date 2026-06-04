@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
-  Calendar,
+  CheckCircle2,
+  ChevronRight,
   Lock,
   MessageSquare,
   Plus,
-  Video,
-  TrendingUp,
-  TrendingDown,
-  Minus,
+  Shield,
+  Star,
+  Users,
 } from "lucide-react";
 import type { SchoolAnalytics } from "@/types";
 import { useSession } from "next-auth/react";
@@ -30,15 +29,10 @@ import { getSchoolAnalytics, getSchoolProfile } from "@/lib/api/school-client";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import { EmptyState, ErrorState } from "@/components/system/system-states";
 import { RowsSkeleton, StatsGridSkeleton } from "@/components/system/dashboard-skeletons";
-import {
-  Panel,
-  PanelHeader,
-  PageShell,
-  StatusBadge,
-} from "@/components/layout/page-shell";
+import { Panel, PageShell, StatusBadge } from "@/components/layout/page-shell";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
-type SchoolJob = { id: string; title: string; status: string; _count: { applications: number } };
+type SchoolJob = { id: string; title: string; status: string; subject?: string; _count: { applications: number }; shortlisted?: number };
 type RankedCandidate = {
   id: string;
   applicantId: string;
@@ -46,7 +40,9 @@ type RankedCandidate = {
   appliedAt: string;
   matchScore: number;
   applicant: {
+    id?: string;
     name: string;
+    avatarUrl?: string | null;
     teacherProfile: {
       city: string | null;
       experience: string | null;
@@ -71,10 +67,9 @@ type SchoolProfileState = {
   verified?: boolean;
 };
 
-
 export default function SchoolDashboardPage() {
   const router = useRouter();
-  const { data: session, status: sessionStatus } = useSession();
+  const { status: sessionStatus } = useSession();
   const [analytics, setAnalytics] = useState<SchoolAnalytics | null>(null);
   const [analyticsLocked, setAnalyticsLocked] = useState(false);
   const [jobs, setJobs] = useState<SchoolJob[]>([]);
@@ -105,7 +100,6 @@ export default function SchoolDashboardPage() {
         if (msg.includes("PLAN_UPGRADE_REQUIRED") || (analyticsData.reason as any)?.error === "PLAN_UPGRADE_REQUIRED") {
           setAnalyticsLocked(true);
         }
-        // non-fatal — continue loading the rest of the dashboard
       } else {
         setAnalytics(analyticsData.value as SchoolAnalytics);
       }
@@ -148,16 +142,18 @@ export default function SchoolDashboardPage() {
   }, [sessionStatus]);
 
   const summary = analytics?.summary;
-  const activeJobs =
-    summary?.activeJobs ?? jobs.filter((j) => j.status === "ACTIVE").length;
-  const totalApplications =
-    summary?.totalApplications ??
-    jobs.reduce((sum, j) => sum + (j._count?.applications || 0), 0);
+  const activeJobs = summary?.activeJobs ?? jobs.filter((j) => j.status === "ACTIVE").length;
+  const totalApplications = summary?.totalApplications ?? jobs.reduce((sum, j) => sum + (j._count?.applications || 0), 0);
   const shortlisted = summary?.shortlisted ?? 0;
   const hired = summary?.hired ?? 0;
-  const offers = Math.max(shortlisted - hired, 0);
 
-  const firstName = (session?.user?.name || "Admin").split(" ").filter(Boolean)[0] || "Admin";
+  const trend = analytics?.trend || [];
+  const recentWindow = trend.slice(-7);
+  const previousWindow = trend.slice(-14, -7);
+  const recentApps = recentWindow.reduce((s, i) => s + i.applications, 0);
+  const previousApps = previousWindow.reduce((s, i) => s + i.applications, 0);
+  const appDelta = recentApps - previousApps;
+
 
   const upcomingInterviews = useMemo(
     () =>
@@ -167,51 +163,17 @@ export default function SchoolDashboardPage() {
     [interviews]
   );
 
-  const topApplicants = useMemo(
+  const topCandidates = useMemo(
     () =>
       ranked
         .filter((c) => c.status !== "REJECTED" && c.status !== "HIRED")
-        .slice()
-        .sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime())
         .slice(0, 4),
     [ranked]
   );
 
-  const topMatches = useMemo(() => {
-    const recentIds = new Set(topApplicants.map((c) => c.id));
-    return ranked
-      .filter((c) => !recentIds.has(c.id))
-      .filter((c) => c.status !== "REJECTED" && c.status !== "HIRED")
-      .slice()
-      .sort((a, b) => b.matchScore - a.matchScore)
-      .slice(0, 4);
-  }, [ranked, topApplicants]);
-
-  const trend = analytics?.trend || [];
-  const recentWindow = trend.slice(-7);
-  const previousWindow = trend.slice(-14, -7);
-  const recentApps = recentWindow.reduce((s, i) => s + i.applications, 0);
-  const previousApps = previousWindow.reduce((s, i) => s + i.applications, 0);
-  const appDelta = recentApps - previousApps;
-
-  const interviewsNextWeek = upcomingInterviews.filter((e) => {
-    const diff = new Date(e.scheduledAt).getTime() - Date.now();
-    return diff > 0 && diff <= 7 * 24 * 60 * 60 * 1000;
-  }).length;
-
-  const hiredRate =
-    totalApplications > 0 ? Math.round((hired / totalApplications) * 100) : 0;
-
-  const verificationStatus =
+  const verificationStatus: "VERIFIED" | "PENDING" | "UNVERIFIED" =
     schoolProfile?.verificationStatus ||
     (schoolProfile?.verified ? "VERIFIED" : "UNVERIFIED");
-
-  const needsProfileFinish =
-    !schoolProfile?.schoolName ||
-    !schoolProfile?.city ||
-    !schoolProfile?.board ||
-    !schoolProfile?.about ||
-    !schoolProfile?.logoUrl;
 
   const inviteCandidate = async (candidate: RankedCandidate) => {
     try {
@@ -226,14 +188,12 @@ export default function SchoolDashboardPage() {
   };
 
   const pipelineStages = [
-    { label: "New", value: totalApplications, color: "#0a66c2" },
-    { label: "Reviewed", value: Math.max(totalApplications - shortlisted, 0), color: "#64748b" },
-    { label: "Shortlisted", value: shortlisted, color: "#2563eb" },
-    { label: "Interview", value: upcomingInterviews.length, color: "#d97706" },
-    { label: "Offer", value: offers, color: "#059669" },
-    { label: "Hired", value: hired, color: "#166534" },
+    { label: "New", value: totalApplications, color: "text-[var(--eh-primary-700)]", bg: "bg-[var(--eh-primary-50)]" },
+    { label: "Reviewed", value: Math.max(totalApplications - shortlisted, 0), color: "text-[var(--eh-text-2)]", bg: "bg-slate-50" },
+    { label: "Shortlisted", value: shortlisted, color: "text-violet-700", bg: "bg-violet-50" },
+    { label: "Interview", value: upcomingInterviews.length, color: "text-amber-700", bg: "bg-amber-50" },
+    { label: "Hired", value: hired, color: "text-emerald-700", bg: "bg-emerald-50" },
   ];
-  const maxStageValue = Math.max(...pipelineStages.map((s) => s.value), 1);
 
   if (loading) {
     return (
@@ -260,33 +220,23 @@ export default function SchoolDashboardPage() {
 
   return (
     <PageShell>
-      {/* ── Page header ── */}
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--eh-border)] pb-5">
-        <div>
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.09em] text-[var(--eh-text-4)]">
-            School dashboard
-          </p>
-          <h1 className="text-[24px] font-semibold leading-[1.15] tracking-[-0.022em] text-[var(--eh-text)] sm:text-[26px]">
-            Good morning, {firstName}
-          </h1>
-          <p className="mt-1.5 text-[14px] leading-6 text-[var(--eh-text-3)]">
-            {Math.max(totalApplications - shortlisted, 0)} new applications since your last review.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/dashboard/applicants" className="eh-btn eh-btn-secondary">
-            <Calendar size={14} />
-            Review applicants
-          </Link>
-          <Link href="/dashboard/post-job" className="eh-btn eh-btn-primary">
-            <Plus size={14} />
-            Post a job
+      {/* ── Verification success banner ── */}
+      {verificationStatus === "VERIFIED" ? (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 size={20} className="shrink-0 text-emerald-600" />
+            <div>
+              <p className="text-[14px] font-semibold text-emerald-900">School Verified</p>
+              <p className="text-[13px] text-emerald-700">
+                Your school is verified. You can now publish jobs and connect with the best educators.
+              </p>
+            </div>
+          </div>
+          <Link href="/dashboard/profile" className="eh-btn eh-btn-sm shrink-0 border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50">
+            View School Profile
           </Link>
         </div>
-      </div>
-
-      {/* ── Verification banner ── */}
-      {verificationStatus !== "VERIFIED" ? (
+      ) : verificationStatus === "PENDING" || verificationStatus === "UNVERIFIED" ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -298,9 +248,7 @@ export default function SchoolDashboardPage() {
             <p className="mt-1 text-[13px] text-amber-900">
               {verificationStatus === "PENDING"
                 ? "Your school profile is under admin review. Keep details current while it's checked."
-                : needsProfileFinish
-                  ? "Finish your school profile, logo, and about section before requesting verification."
-                  : "Request verification so your jobs carry stronger trust signals for teachers."}
+                : "Complete your school profile to request verification and build trust with candidates."}
             </p>
           </div>
           <Link href="/dashboard/profile" className="eh-btn eh-btn-primary eh-btn-sm shrink-0">
@@ -311,397 +259,197 @@ export default function SchoolDashboardPage() {
 
       <OnboardingChecklist role="SCHOOL_ADMIN" schoolPlan={analyticsLocked ? "FREE" : undefined} />
 
-      {/* ── Plan upgrade banner (FREE plan) ── */}
-      {analyticsLocked ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--eh-border)] bg-gradient-to-r from-slate-50 to-white px-4 py-3.5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-              <Lock size={15} className="text-slate-500" />
-            </div>
-            <div>
-              <p className="text-[13px] font-semibold text-[var(--eh-text)]">Analytics on Pro plan</p>
-              <p className="text-[12px] text-[var(--eh-text-3)]">Upgrade to unlock your full hiring funnel, conversion rates, and trend data.</p>
-            </div>
-          </div>
-          <Link href="/dashboard/subscription" className="eh-btn eh-btn-primary eh-btn-sm shrink-0">
-            Upgrade plan
-          </Link>
-        </div>
-      ) : null}
-
       {/* ── KPI metrics ── */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Active jobs", value: activeJobs, hint: "Live roles", color: "bg-[var(--eh-primary-500)]", textColor: "text-[var(--eh-primary-700)]", href: "/dashboard/my-jobs", locked: false },
-          { label: "Applications", value: totalApplications, hint: analyticsLocked ? "Upgrade for trends" : (appDelta > 0 ? `+${appDelta} vs last week` : appDelta < 0 ? `${appDelta} vs last week` : "No change"), color: "bg-sky-500", textColor: "text-sky-700", href: "/dashboard/applicants", locked: false },
-          { label: "Shortlisted", value: analyticsLocked ? "—" : shortlisted, hint: analyticsLocked ? "Pro feature" : `${shortlisted > 0 ? Math.round((shortlisted / Math.max(totalApplications, 1)) * 100) : 0}% conversion`, color: "bg-violet-500", textColor: "text-violet-700", href: analyticsLocked ? "/dashboard/subscription" : "/dashboard/applicants", locked: analyticsLocked },
-          { label: "Interviews", value: upcomingInterviews.length, hint: `${interviewsNextWeek} this week`, color: "bg-amber-400", textColor: "text-amber-700", href: "/dashboard/interviews", locked: false },
-          { label: "Offers sent", value: analyticsLocked ? "—" : offers, hint: analyticsLocked ? "Pro feature" : (offers > 0 ? "Awaiting response" : "None pending"), color: "bg-emerald-400", textColor: "text-emerald-700", href: analyticsLocked ? "/dashboard/subscription" : "/dashboard/applicants", locked: analyticsLocked },
-          { label: "Hired", value: analyticsLocked ? "—" : hired, hint: analyticsLocked ? "Pro feature" : `${hiredRate}% hire rate`, color: "bg-emerald-600", textColor: "text-emerald-800", href: analyticsLocked ? "/dashboard/subscription" : "/dashboard/applicants", locked: analyticsLocked },
+          { label: "Active Jobs", value: activeJobs, hint: "Currently open", tone: "neutral" as const, textColor: "text-[var(--eh-primary-700)]", href: "/dashboard/my-jobs" },
+          { label: "Total Applications", value: totalApplications, hint: appDelta > 0 ? `↑ ${appDelta} this week` : appDelta < 0 ? `↓ ${Math.abs(appDelta)} this week` : "No change this week", tone: appDelta > 0 ? "up" as const : appDelta < 0 ? "down" as const : "neutral" as const, textColor: "text-sky-700", href: "/dashboard/applicants" },
+          { label: "Shortlisted", value: analyticsLocked ? "—" : shortlisted, hint: analyticsLocked ? "Plan upgrade required" : "Awaiting your review", tone: "neutral" as const, textColor: "text-violet-700", href: "/dashboard/applicants", locked: analyticsLocked },
+          { label: "Interviews This Week", value: upcomingInterviews.length, hint: "Scheduled ahead", tone: "neutral" as const, textColor: "text-amber-700", href: "/dashboard/interviews" },
         ].map((m) => (
           <Link
             key={m.label}
             href={m.href}
-            className={[
-              "group relative rounded-xl border bg-white px-4 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition-all",
-              m.locked
-                ? "border-[var(--eh-border)] opacity-60 hover:opacity-80"
-                : "border-[var(--eh-border)] hover:border-[var(--eh-border-strong)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.08)]",
-            ].join(" ")}
+            className="group relative rounded-xl border border-[var(--eh-border)] bg-white px-5 py-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition-all hover:border-[var(--eh-border-strong)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.08)]"
           >
-            {m.locked ? (
-              <Lock size={11} className="absolute right-3 top-3 text-slate-400" />
-            ) : null}
-            <div className={`mb-3 h-0.5 w-6 rounded-full ${m.color}`} />
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--eh-text-4)]">
-              {m.label}
-            </p>
-            <p className={`mt-1.5 text-[26px] font-semibold leading-none tracking-[-0.03em] ${m.locked ? "text-slate-300" : m.textColor}`}>
+            {(m as any).locked ? <Lock size={11} className="absolute right-3 top-3 text-slate-400" /> : null}
+            <p className="text-[12px] font-semibold text-[var(--eh-text-3)]">{m.label}</p>
+            <p className={`mt-2 text-[32px] font-bold leading-none tracking-[-0.03em] ${(m as any).locked ? "text-slate-300" : m.textColor}`}>
               {m.value}
             </p>
-            <p className="mt-2 text-[12px] leading-[1.4] text-[var(--eh-text-3)]">{m.hint}</p>
+            <p className={`mt-2 text-[12px] leading-[1.4] font-medium ${m.tone === "up" ? "text-emerald-600" : m.tone === "down" ? "text-red-500" : "text-[var(--eh-text-4)]"}`}>{m.hint}</p>
           </Link>
         ))}
       </div>
 
-      {/* ── Pipeline + Top applicants ── */}
-      <div className="grid gap-4 xl:grid-cols-[1.65fr_1.05fr]">
+      {/* ── Hiring Pipeline + Job Performance ── */}
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+        {/* Hiring Pipeline */}
         <Panel className="p-5">
-          <PanelHeader
-            title="Application pipeline"
-            subtitle={`Across ${activeJobs} active job${activeJobs === 1 ? "" : "s"}`}
-            actions={
-              analyticsLocked ? (
-                <Link href="/dashboard/subscription" className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--eh-primary-600)] hover:text-[var(--eh-primary-800)] transition-colors">
-                  <Lock size={11} /> Upgrade
-                </Link>
-              ) : (
-                <Link
-                  href="/dashboard/pipeline"
-                  className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--eh-text-3)] hover:text-[var(--eh-text-2)] transition-colors"
-                >
-                  View all <ArrowRight size={12} />
-                </Link>
-              )
-            }
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-[15px] font-semibold text-[var(--eh-text)]">Hiring Pipeline</h2>
+            </div>
+            <Link href="/dashboard/applicants" className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--eh-primary-600)] hover:text-[var(--eh-primary-800)] transition-colors">
+              View all applicants <ChevronRight size={13} />
+            </Link>
+          </div>
+          <div className="flex items-center gap-1">
+            {pipelineStages.map((stage, i) => (
+              <div key={stage.label} className="flex items-center gap-1 flex-1 min-w-0">
+                <div className={`flex-1 min-w-0 rounded-xl ${stage.bg} border border-[var(--eh-border)] px-3 py-3 text-center`}>
+                  <p className={`text-[22px] font-bold leading-none ${stage.color}`}>{stage.value}</p>
+                  <p className="mt-1 text-[11px] font-medium text-[var(--eh-text-3)]">{stage.label}</p>
+                </div>
+                {i < pipelineStages.length - 1 && (
+                  <ChevronRight size={14} className="shrink-0 text-[var(--eh-text-4)]" />
+                )}
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        {/* Job Performance */}
+        <Panel className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-[15px] font-semibold text-[var(--eh-text)]">Job Performance</h2>
+            <Link href="/dashboard/my-jobs" className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--eh-primary-600)] hover:text-[var(--eh-primary-800)] transition-colors">
+              See all jobs <ChevronRight size={13} />
+            </Link>
+          </div>
+          {jobs.length === 0 ? (
+            <EmptyState title="No jobs posted yet" message="Post your first job to start tracking performance." actions={<Link href="/dashboard/post-job" className="eh-btn eh-btn-primary eh-btn-sm"><Plus size={13} /> Post a job</Link>} />
+          ) : (
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-[var(--eh-border)]">
+                  <th className="pb-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">Job Title</th>
+                  <th className="pb-2 text-right text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">Applicants</th>
+                  <th className="pb-2 text-right text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">Shortlisted</th>
+                  <th className="pb-2 text-right text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">Interviews</th>
+                  <th className="pb-2 text-right text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jobs.slice(0, 6).map((job) => (
+                  <tr key={job.id} className="border-b border-[var(--eh-border)] last:border-0">
+                    <td className="py-2.5 pr-2 font-medium text-[var(--eh-text)]">{job.title}</td>
+                    <td className="py-2.5 text-right text-[var(--eh-text-2)]">{job._count.applications}</td>
+                    <td className="py-2.5 text-right text-[var(--eh-text-2)]">{job.shortlisted ?? 0}</td>
+                    <td className="py-2.5 text-right text-[var(--eh-text-2)]">—</td>
+                    <td className="py-2.5 text-right">
+                      <StatusBadge tone={job.status === "ACTIVE" ? "success" : job.status === "DRAFT" ? "warning" : "neutral"}>
+                        {job.status === "ACTIVE" ? "Active" : job.status === "DRAFT" ? "Draft" : "Closed"}
+                      </StatusBadge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Panel>
+      </div>
+
+      {/* ── Top Candidates to Review ── */}
+      <Panel className="p-5">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-[15px] font-semibold text-[var(--eh-text)]">Top Candidates to Review</h2>
+          </div>
+          <Link href="/dashboard/applicants" className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--eh-primary-600)] hover:text-[var(--eh-primary-800)] transition-colors">
+            See all <ChevronRight size={13} />
+          </Link>
+        </div>
+        {topCandidates.length === 0 ? (
+          <EmptyState
+            title="No candidates yet"
+            message="Share your active jobs to attract candidates."
+            actions={<Link href="/dashboard/my-jobs" className="eh-btn eh-btn-secondary eh-btn-sm">View my jobs</Link>}
           />
-          {analyticsLocked ? (
-            <div className="relative select-none overflow-hidden rounded-lg">
-              {/* Blurred ghost pipeline */}
-              <div className="pointer-events-none space-y-2.5 blur-sm opacity-30">
-                {["New", "Reviewed", "Shortlisted", "Interview", "Offer", "Hired"].map((label, i) => (
-                  <div key={label} className="flex items-center gap-3">
-                    <span className="w-[90px] shrink-0 text-[13px] font-medium text-[var(--eh-text-2)]">{label}</span>
-                    <div className="flex flex-1 items-center gap-2">
-                      <div className="relative h-5 flex-1 overflow-hidden rounded-md bg-[var(--surface-base)]">
-                        <div className="absolute left-0 top-0 h-full rounded-md" style={{ width: `${Math.max(80 - i * 14, 10)}%`, background: "#0a66c2" }} />
-                      </div>
-                      <span className="w-7 shrink-0 text-right text-[12px] font-semibold tabular-nums text-[var(--eh-text-2)]">—</span>
+        ) : (
+          <div className="space-y-3">
+            {topCandidates.map((candidate) => {
+              const name = candidate.applicant.name;
+              const profile = candidate.applicant.teacherProfile;
+              const score = candidate.matchScore;
+              const scoreColor = score >= 90 ? "text-emerald-700 bg-emerald-50 border-emerald-200" : score >= 75 ? "text-[var(--eh-primary-700)] bg-[var(--eh-primary-50)] border-[var(--eh-primary-100)]" : "text-amber-700 bg-amber-50 border-amber-200";
+              return (
+                <div key={candidate.id} className="flex items-center gap-4 rounded-xl border border-[var(--eh-border)] px-4 py-3.5 transition-all hover:border-[var(--eh-border-strong)] hover:shadow-sm">
+                  <UserAvatar name={name} avatarUrl={candidate.applicant.avatarUrl} size={44} className="shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-[14px] font-semibold text-[var(--eh-text)]">{name}</p>
+                      {profile?.subjects?.[0] && (
+                        <span className="text-[12px] text-[var(--eh-text-3)]">
+                          {profile.subjects[0]} Teacher · {profile.experience || "Experienced"} · {profile.city || "India"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        Available immediately
+                      </span>
+                      {(profile as any)?.safetyBadgeGranted && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] px-2 py-0.5 text-[11px] font-semibold text-[var(--eh-primary-700)]">
+                          <Shield size={10} /> Safety Verified
+                        </span>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-              {/* Lock overlay */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md">
-                  <Lock size={18} className="text-slate-500" />
-                </div>
-                <p className="text-[13px] font-semibold text-[var(--eh-text)]">Pipeline analytics on Pro</p>
-                <Link href="/dashboard/subscription" className="eh-btn eh-btn-primary eh-btn-sm">Upgrade plan</Link>
-              </div>
-            </div>
-          ) : (
-          <div className="space-y-2.5">
-            {pipelineStages.map((stage) => {
-              const pct = Math.round((stage.value / maxStageValue) * 100);
-              return (
-                <div key={stage.label} className="flex items-center gap-3">
-                  <span className="w-[90px] shrink-0 text-[13px] font-medium text-[var(--eh-text-2)]">
-                    {stage.label}
-                  </span>
-                  <div className="flex flex-1 items-center gap-2">
-                    <div className="relative h-5 flex-1 overflow-hidden rounded-md bg-[var(--surface-base)]">
-                      <div
-                        className="absolute left-0 top-0 h-full rounded-md transition-all duration-500"
-                        style={{
-                          width: stage.value > 0 ? `${Math.max(pct, 8)}%` : "0%",
-                          background: stage.color,
-                        }}
-                      />
-                    </div>
-                    <span className="w-7 shrink-0 text-right text-[12px] font-semibold tabular-nums text-[var(--eh-text-2)]">
-                      {stage.value}
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className={`rounded-md border px-2.5 py-1 text-[13px] font-bold ${scoreColor}`}>
+                      {score}% Match
                     </span>
+                    <Link href="/dashboard/applicants" className="eh-btn eh-btn-secondary eh-btn-sm">
+                      <Star size={13} /> Shortlist
+                    </Link>
+                    {featureFlags.messaging && (
+                      <button
+                        type="button"
+                        onClick={() => inviteCandidate(candidate)}
+                        className="eh-btn eh-btn-secondary eh-btn-sm"
+                      >
+                        <MessageSquare size={13} /> Message
+                      </button>
+                    )}
+                    <Link
+                      href={`/dashboard/applicants/${candidate.applicant.id || candidate.applicantId}`}
+                      className="eh-btn eh-btn-secondary eh-btn-sm"
+                    >
+                      View Profile
+                    </Link>
                   </div>
                 </div>
               );
             })}
           </div>
-          )}
-        </Panel>
-
-        <Panel className="p-5">
-          <PanelHeader
-            title="Top applicants"
-            actions={
-              <Link
-                href="/dashboard/applicants"
-                className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--eh-text-3)] hover:text-[var(--eh-text-2)] transition-colors"
-              >
-                View all <ArrowRight size={12} />
-              </Link>
-            }
-            compact
-          />
-          <div>
-            {topApplicants.length === 0 ? (
-              <EmptyState
-                title="No applications yet"
-                message="Share your active jobs to attract candidates."
-                actions={
-                  <Link href="/dashboard/my-jobs" className="eh-btn eh-btn-secondary eh-btn-sm">
-                    View my jobs
-                  </Link>
-                }
-              />
-            ) : (
-              topApplicants.map((candidate) => {
-                const name = candidate.applicant.name;
-                return (
-                  <div
-                    key={candidate.id}
-                    className="flex items-center gap-3 border-t border-[var(--eh-border)] py-3 first:border-t-0 first:pt-0"
-                  >
-                    <UserAvatar name={name} avatarUrl={(candidate.applicant as any).avatarUrl} size={32} className="shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-semibold text-[var(--eh-text)]">{name}</p>
-                      <p className="truncate text-[11px] text-[var(--eh-text-3)]">
-                        {candidate.applicant.teacherProfile?.experience || "Experienced"} ·{" "}
-                        {candidate.applicant.teacherProfile?.city || "Location not set"}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="rounded-md border border-[var(--eh-primary-100)] bg-[var(--eh-primary-50)] px-1.5 py-0.5 text-[11px] font-bold text-[var(--eh-primary-700)]">
-                        {candidate.matchScore}%
-                      </span>
-                      <Link
-                        href="/dashboard/applicants"
-                        className="eh-btn eh-btn-secondary eh-btn-sm"
-                      >
-                        Review
-                      </Link>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </Panel>
-      </div>
-
-      {/* ── Interviews + Top matches ── */}
-      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <Panel className="p-5">
-          <PanelHeader
-            title="Upcoming interviews"
-            actions={
-              <Link
-                href="/dashboard/interviews"
-                className="text-[12px] font-semibold text-[var(--eh-text-3)] hover:text-[var(--eh-text-2)] transition-colors"
-              >
-                All
-              </Link>
-            }
-            compact
-          />
-          <div className="space-y-2">
-            {upcomingInterviews.length === 0 ? (
-              <EmptyState
-                title="No interviews scheduled yet"
-                message="Shortlist candidates to start booking interviews."
-                actions={
-                  <Link href="/dashboard/applicants" className="eh-btn eh-btn-secondary eh-btn-sm">
-                    Open applicants
-                  </Link>
-                }
-              />
-            ) : (
-              upcomingInterviews.slice(0, 3).map((interview, idx) => {
-                const name = interview.application?.applicant?.name || `Candidate ${idx + 1}`;
-                return (
-                  <div
-                    key={interview.id}
-                    className="flex items-center gap-3 rounded-lg border border-[var(--eh-border)] px-3.5 py-3"
-                  >
-                    <UserAvatar name={name} size={32} className="shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-semibold text-[var(--eh-text)]">{name}</p>
-                      <p className="truncate text-[11px] text-[var(--eh-text-3)]">
-                        {interview.application?.job?.title}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-[11px] font-semibold text-[var(--eh-text-2)]">
-                        {new Date(interview.scheduledAt).toLocaleDateString("en-IN", {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "short",
-                        })}
-                      </p>
-                      <div className="mt-0.5 flex items-center justify-end gap-1">
-                        {interview.type === "VIDEO" ? (
-                          <Video size={10} className="text-[var(--eh-text-4)]" />
-                        ) : null}
-                        <span className="text-[10px] text-[var(--eh-text-4)]">
-                          {interview.type === "VIDEO" ? "Online" : "In-person"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </Panel>
-
-        <Panel className="p-5">
-          <PanelHeader
-            title="Top matches"
-            subtitle="Ranked by profile fit, recency, and role alignment."
-            actions={
-              <StatusBadge tone="brand">AI ranked</StatusBadge>
-            }
-            compact
-          />
-          <div>
-            {topMatches.length === 0 ? (
-              <EmptyState
-                title="No additional matches yet"
-                message="New profiles appear here as applications arrive."
-              />
-            ) : (
-              topMatches.map((candidate) => (
-                <div
-                  key={`${candidate.id}-top`}
-                  className="flex items-center gap-3 border-t border-[var(--eh-border)] py-3 first:border-t-0 first:pt-0"
-                >
-                  <UserAvatar name={candidate.applicant.name} avatarUrl={(candidate.applicant as any).avatarUrl} size={28} className="shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-semibold text-[var(--eh-text)]">
-                      {candidate.applicant.name}
-                    </p>
-                    <p className="truncate text-[11px] text-[var(--eh-text-3)]">
-                      {candidate.applicant.teacherProfile?.subjects?.[0] ||
-                        candidate.applicant.teacherProfile?.qualification ||
-                        "Teacher"}{" "}
-                      · {candidate.applicant.teacherProfile?.city || "India"}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-[13px] font-bold text-[var(--eh-primary-700)]">
-                      {candidate.matchScore}%
-                    </span>
-                    {featureFlags.messaging && (
-                      <button
-                        type="button"
-                        onClick={() => inviteCandidate(candidate)}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--eh-primary-600)] hover:text-[var(--eh-primary-800)] transition-colors"
-                      >
-                        <MessageSquare size={11} />
-                        Invite
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Panel>
-      </div>
-
-      {/* ── Operations snapshot ── */}
-      <Panel className="p-5">
-        <PanelHeader
-          title="Operations snapshot"
-          subtitle="Key signals across your current hiring cycle."
-          actions={
-            analyticsLocked ? (
-              <Link href="/dashboard/subscription" className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--eh-primary-600)] hover:text-[var(--eh-primary-800)] transition-colors">
-                <Lock size={11} /> Upgrade for full analytics
-              </Link>
-            ) : (
-              <Link
-                href="/dashboard/analytics"
-                className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--eh-text-3)] hover:text-[var(--eh-text-2)] transition-colors"
-              >
-                Full analytics <ArrowRight size={12} />
-              </Link>
-            )
-          }
-        />
-        <div className="grid gap-3 sm:grid-cols-3">
-          <OpsCard
-            label="Application pace"
-            value={analyticsLocked ? "—" : (appDelta >= 0 ? "Up this week" : "Down this week")}
-            detail={analyticsLocked ? "Upgrade to see trends" : (appDelta > 0 ? `+${appDelta} vs last week` : appDelta < 0 ? `${appDelta} vs last week` : "No movement")}
-            locked={analyticsLocked}
-            icon={
-              analyticsLocked ? <Lock size={16} className="text-slate-400" /> :
-              appDelta > 0 ? (
-                <TrendingUp size={16} className="text-emerald-600" />
-              ) : appDelta < 0 ? (
-                <TrendingDown size={16} className="text-red-500" />
-              ) : (
-                <Minus size={16} className="text-slate-400" />
-              )
-            }
-          />
-          <OpsCard
-            label="Interviews · next 7 days"
-            value={String(interviewsNextWeek)}
-            detail="Plan panels and follow-ups early."
-            icon={<Calendar size={16} className="text-amber-600" />}
-          />
-          <OpsCard
-            label="Hire rate"
-            value={analyticsLocked ? "—" : `${hiredRate}%`}
-            detail={analyticsLocked ? "Upgrade to see hire rate" : "Across current applications."}
-            locked={analyticsLocked}
-            icon={analyticsLocked ? <Lock size={16} className="text-slate-400" /> : <TrendingUp size={16} className="text-[var(--eh-primary-600)]" />}
-          />
-        </div>
+        )}
       </Panel>
-    </PageShell>
-  );
-}
 
-function OpsCard({
-  label,
-  value,
-  detail,
-  icon,
-  locked,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: ReactNode;
-  locked?: boolean;
-}) {
-  return (
-    <div className={["flex gap-3 rounded-xl border border-[var(--eh-border)] bg-[var(--surface-base)] p-4", locked ? "opacity-60" : ""].join(" ").trim()}>
-      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--eh-border)] bg-white">
-        {icon}
+      {/* ── Managed Recruitment CTA ── */}
+      <div className="flex flex-col gap-4 rounded-xl border border-[var(--eh-border)] bg-white p-6 sm:flex-row sm:items-center">
+        <div className="flex flex-1 items-center gap-5">
+          <div className="hidden h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[var(--eh-primary-50)] sm:flex">
+            <Users size={22} className="text-[var(--eh-primary-600)]" />
+          </div>
+          <div>
+            <p className="text-[15px] font-semibold text-[var(--eh-text)]">Let EduHire handle your hiring</p>
+            <p className="mt-1 text-[13px] leading-[1.6] text-[var(--eh-text-3)]">
+              Our Managed Recruitment Service takes care of everything — from sourcing and screening to shortlisting and interview coordination. You focus on students, we&apos;ll handle the rest.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-3">
+              {["Verified & pre-screened Candidates", "End-to-End Hiring Support", "Faster Hiring, Better Quality"].map((feat) => (
+                <span key={feat} className="inline-flex items-center gap-1.5 text-[12px] text-[var(--eh-text-3)]">
+                  <CheckCircle2 size={12} className="text-emerald-500" /> {feat}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+        <Link href="/dashboard/managed-recruitment" className="eh-btn eh-btn-primary shrink-0">
+          Explore Managed Recruitment <ArrowRight size={14} />
+        </Link>
       </div>
-      <div className="min-w-0">
-        <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">
-          {label}
-        </p>
-        <p className={["mt-1 text-[18px] font-semibold leading-none tracking-[-0.02em]", locked ? "text-slate-300" : "text-[var(--eh-text)]"].join(" ")}>
-          {value}
-        </p>
-        <p className="mt-1 text-[12px] text-[var(--eh-text-3)]">{detail}</p>
-      </div>
-    </div>
+    </PageShell>
   );
 }

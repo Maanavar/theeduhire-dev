@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
-const db = prisma as any;
 
 export async function PATCH(req: NextRequest) {
   try {
@@ -11,7 +10,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const includeArchived = !!body.includeArchived;
 
-    await db.notification.updateMany({
+    await prisma.notification.updateMany({
       where: {
         userId: auth.user.id,
         readAt: null,

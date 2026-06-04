@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
-const db = prisma as any;
 
 export async function PATCH(
   req: NextRequest,
@@ -15,7 +14,7 @@ export async function PATCH(
     const body = await req.json().catch(() => ({}));
     const archived = body.archived !== false;
 
-    const updated = await db.notification.updateMany({
+    const updated = await prisma.notification.updateMany({
       where: { id, userId: auth.user.id },
       data: { archivedAt: archived ? new Date() : null },
     });

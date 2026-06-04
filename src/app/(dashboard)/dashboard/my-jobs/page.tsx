@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  ArrowRight,
   ChevronRight,
   Edit2,
-  Eye,
-  Filter,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -18,30 +17,39 @@ import {
 import { timeAgo } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { getMyJobs, updateJobStatus } from "@/lib/api/hiring-client";
+import { getBillingPlan, type BillingPlan } from "@/lib/api/billing-client";
+import { useClickOutside } from "@/hooks/use-click-outside";
 import { toast } from "sonner";
-import { EmptyState, ErrorState } from "@/components/system/system-states";
+import { NoJobsPostedState, SomethingWentWrongState } from "@/components/system/illustrated-states";
 import { TableSkeleton } from "@/components/system/dashboard-skeletons";
 import {
-  DataTable,
-  FilterBar,
   PageHeader,
   PageShell,
   Panel,
   StatusBadge,
-  Toolbar,
 } from "@/components/layout/page-shell";
 
 type MyJob = {
   id: string;
   title: string;
   subject: string;
+  board: string;
   gradeLevel: string;
   jobType: string;
+  experience: string | null;
+  experienceLevel: string | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  isUrgent: boolean;
+  requiredWithin48h: boolean;
+  requiresTet: boolean;
+  applicationDeadline: string | null;
   postedAt: string;
   expiresAt: string | null;
   status: "ACTIVE" | "DRAFT" | "CLOSED" | "EXPIRED";
   school?: { schoolName?: string | null };
   _count: { applications: number };
+  shortlistedCount: number;
 };
 
 const STATUS_TABS: Array<{ key: "ACTIVE" | "DRAFT" | "CLOSED" | "EXPIRED"; label: string }> = [
@@ -193,17 +201,37 @@ export default function MyJobsPage() {
   const [tab, setTab] = useState<"ACTIVE" | "DRAFT" | "CLOSED" | "EXPIRED">("ACTIVE");
   const [subjectFilter, setSubjectFilter] = useState("ALL");
   const [typeFilter, setTypeFilter] = useState("ALL");
+  const [boardFilter, setBoardFilter] = useState("ALL");
+  const [sortOrder, setSortOrder] = useState<"latest" | "oldest">("latest");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
   const [dismissedPublishedId, setDismissedPublishedId] = useState<string | null>(null);
   const [previewJob, setPreviewJob] = useState<MyJob | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const publishedJobId = searchParams.get("published");
+
+  useClickOutside(menuRef, () => setOpenMenuId(null), !!openMenuId);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setOpenMenuId(null); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [openMenuId]);
+
+  const [billing, setBilling] = useState<BillingPlan | null>(null);
 
   useEffect(() => {
     getMyJobs()
       .then((data) => setJobs(data as MyJob[]))
       .catch((err) => setError(getApiErrorMessage(err, "Failed to load jobs")))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    getBillingPlan().then(setBilling).catch(() => {});
   }, []);
 
   const counts = useMemo(
@@ -216,26 +244,35 @@ export default function MyJobsPage() {
     [jobs]
   );
 
-  const filtered = useMemo(
-    () =>
-      jobs.filter((job) => {
-        const byTab = job.status === tab;
-        const bySubject = subjectFilter === "ALL" || job.subject === subjectFilter;
-        const byType = typeFilter === "ALL" || job.jobType === typeFilter;
-        const q = search.trim().toLowerCase();
-        const byQuery =
-          q.length === 0 ||
-          job.title.toLowerCase().includes(q) ||
-          job.subject.toLowerCase().includes(q) ||
-          job.gradeLevel.toLowerCase().includes(q);
-        return byTab && bySubject && byType && byQuery;
-      }),
-    [jobs, search, tab, subjectFilter, typeFilter]
-  );
+  const filtered = useMemo(() => {
+    const result = jobs.filter((job) => {
+      const byTab = job.status === tab;
+      const bySubject = subjectFilter === "ALL" || job.subject === subjectFilter;
+      const byType = typeFilter === "ALL" || job.jobType === typeFilter;
+      const byBoard = boardFilter === "ALL" || job.board === boardFilter;
+      const q = search.trim().toLowerCase();
+      const byQuery =
+        q.length === 0 ||
+        job.title.toLowerCase().includes(q) ||
+        job.subject.toLowerCase().includes(q) ||
+        job.gradeLevel.toLowerCase().includes(q);
+      return byTab && bySubject && byType && byBoard && byQuery;
+    });
+    result.sort((a, b) => {
+      const diff = new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime();
+      return sortOrder === "latest" ? diff : -diff;
+    });
+    return result;
+  }, [jobs, search, tab, subjectFilter, typeFilter, boardFilter, sortOrder]);
 
   const subjects = useMemo(() => Array.from(new Set(jobs.map((job) => job.subject))).sort(), [jobs]);
   const jobTypes = useMemo(() => Array.from(new Set(jobs.map((job) => job.jobType))).sort(), [jobs]);
-  const schoolName = jobs[0]?.school?.schoolName || "your school";
+  const boards = useMemo(() => Array.from(new Set(jobs.map((job) => job.board).filter(Boolean))).sort(), [jobs]);
+
+  useEffect(() => { setPage(1); }, [search, tab, subjectFilter, typeFilter, boardFilter, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pagedJobs = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page, PAGE_SIZE]);
 
   const updateStatus = async (jobId: string, status: "DRAFT" | "ACTIVE" | "CLOSED" | "EXPIRED") => {
     setUpdatingStatusId(jobId);
@@ -303,208 +340,271 @@ export default function MyJobsPage() {
 
       <PageHeader
         title="Jobs"
-        subtitle={`Manage all teaching positions at ${schoolName}.`}
+        subtitle="Create, manage, and monitor all your school job postings."
         actions={
           <Link href="/dashboard/post-job" className="eh-btn eh-btn-primary">
-            <Plus size={14} /> Post a job
+            <Plus size={14} /> Post New Job
           </Link>
         }
       />
 
-      {/* Split layout: list + inline preview */}
-      <div className={["flex gap-4 transition-all", previewJob ? "xl:grid xl:grid-cols-[1fr_380px]" : ""].join(" ")}>
+      {/* KPI row — matches Figma */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {[
+          { label: "Total Jobs", value: jobs.length, sub: "All postings", textColor: "text-[var(--eh-primary-700)]" },
+          { label: "Active Jobs", value: counts.ACTIVE, sub: "Currently live", textColor: "text-emerald-700" },
+          { label: "Drafts", value: counts.DRAFT, sub: "Not published", textColor: "text-slate-700" },
+          { label: "Closed Jobs", value: counts.CLOSED, sub: "No longer open", textColor: "text-amber-700" },
+          { label: "Total Applicants", value: jobs.reduce((s, j) => s + j._count.applications, 0), sub: "Across all jobs", textColor: "text-sky-700" },
+        ].map((m) => (
+          <div key={m.label} className="rounded-xl border border-[var(--eh-border)] bg-white px-4 py-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+            <p className="text-[12px] font-semibold text-[var(--eh-text-3)]">{m.label}</p>
+            <p className={`mt-2 text-[28px] font-bold leading-none tracking-[-0.03em] ${m.textColor}`}>{m.value}</p>
+            <p className="mt-2 text-[11px] font-medium text-[var(--eh-text-4)]">{m.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Split layout: list + right sidebar */}
+      <div className={["flex gap-4 transition-all", previewJob ? "xl:grid xl:grid-cols-[1fr_380px]" : "xl:grid xl:grid-cols-[1fr_300px]"].join(" ")}>
         <div className="min-w-0 flex-1">
           <Panel>
-            <Toolbar className="rounded-none border-0 border-b border-eh shadow-none">
+            {/* Status tabs */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--eh-border)] px-4 py-3">
               <div className="flex flex-wrap gap-2">
                 {STATUS_TABS.map((entry) => (
                   <button
                     key={entry.key}
                     onClick={() => setTab(entry.key)}
                     className={[
-                      "rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors",
+                      "rounded-lg border px-3 py-1.5 text-[12px] font-semibold transition-colors",
                       tab === entry.key
-                        ? "border-brand-200 bg-brand-50 text-brand-700"
-                        : "border-eh text-eh-text2 hover:border-brand-200 hover:text-brand-700",
+                        ? "border-[var(--eh-primary-200)] bg-[var(--eh-primary-50)] text-[var(--eh-primary-700)]"
+                        : "border-[var(--eh-border)] text-[var(--eh-text-2)] hover:border-[var(--eh-border-strong)]",
                     ].join(" ")}
                   >
                     {entry.label} ({counts[entry.key]})
                   </button>
                 ))}
               </div>
-              <span className="text-[13px] text-eh-text3">
-                Sort: <strong className="text-eh-text2">Newest first</strong>
+              <span className="text-[12px] text-[var(--eh-text-3)]">
+                Sort: <strong className="text-[var(--eh-text-2)]">Latest</strong>
               </span>
-            </Toolbar>
+            </div>
 
-            <FilterBar>
-              <label className="eh-search min-w-[240px] flex-1">
-                <Search size={14} className="text-eh-text3" />
+            {/* Filter row */}
+            <div className="flex flex-wrap items-center gap-3 border-b border-[var(--eh-border)] px-4 py-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--eh-text-4)]" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by title, subject, or grade"
+                  placeholder="Search by job title..."
+                  className="input-base w-full pl-9"
                 />
-              </label>
-              <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.04em] text-eh-text3">
-                <Filter size={12} /> Filters
-              </span>
-              <select value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)} className="input-base max-w-[160px]">
-                <option value="ALL">All subjects</option>
-                {subjects.map((subject) => (
-                  <option key={subject} value={subject}>{subject}</option>
-                ))}
-              </select>
-              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="input-base max-w-[160px]">
-                <option value="ALL">All types</option>
-                {jobTypes.map((jobType) => (
-                  <option key={jobType} value={jobType}>{typeLabel(jobType)}</option>
-                ))}
-              </select>
-            </FilterBar>
-          </Panel>
-
-          <DataTable>
-            <div className="grid min-w-[820px] grid-cols-[2.2fr_0.9fr_0.9fr_0.8fr_0.7fr_0.7fr_56px] border-b border-eh bg-eh-soft px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-eh-text3">
-              <span>Job</span>
-              <span>Subject</span>
-              <span>Type</span>
-              <span>Posted</span>
-              <span>Applicants</span>
-              <span>Status</span>
-              <span />
+              </div>
+              <div className="eh-select-wrap max-w-[160px] w-full">
+                <select value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)} className="input-base w-full">
+                  <option value="ALL">All Subjects</option>
+                  {subjects.map((subject) => (
+                    <option key={subject} value={subject}>{subject}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="eh-select-wrap max-w-[140px] w-full">
+                <select value={boardFilter} onChange={(e) => setBoardFilter(e.target.value)} className="input-base w-full">
+                  <option value="ALL">All Boards</option>
+                  {boards.map((board) => (
+                    <option key={board} value={board}>{board}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="eh-select-wrap max-w-[140px] w-full">
+                <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="input-base w-full">
+                  <option value="ALL">All Types</option>
+                  {jobTypes.map((jobType) => (
+                    <option key={jobType} value={jobType}>{typeLabel(jobType)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="eh-select-wrap max-w-[120px] w-full">
+                <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "latest" | "oldest")} className="input-base w-full">
+                  <option value="latest">Latest</option>
+                  <option value="oldest">Oldest</option>
+                </select>
+              </div>
             </div>
 
-            {loading ? (
-              <TableSkeleton rows={6} />
-            ) : error ? (
-              <div className="p-4">
-                <ErrorState
-                  title="Couldn't load jobs"
-                  message={error}
-                  actions={
-                    <button
-                      type="button"
-                      onClick={() => window.location.reload()}
-                      className="eh-btn eh-btn-secondary eh-btn-sm"
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead>
+                  <tr className="border-b border-[var(--eh-border)] bg-[var(--surface-base)]">
+                    {["Job Title", "Subject", "Board", "Posted Date", "Applicants", "Shortlisted", "Status", "Actions"].map((h) => (
+                      <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan={8}><TableSkeleton rows={6} /></td></tr>
+                  ) : error ? (
+                    <tr><td colSpan={8} className="p-4">
+                      <SomethingWentWrongState title="Couldn't load jobs" message={error} onRetry={() => window.location.reload()} />
+                    </td></tr>
+                  ) : filtered.length === 0 ? (
+                    <tr><td colSpan={8} className="p-4">
+                      <NoJobsPostedState
+                        actions={<Link href="/dashboard/post-job" className="eh-btn eh-btn-primary eh-btn-sm"><Plus size={13} /> Post a Job</Link>}
+                      />
+                    </td></tr>
+                  ) : pagedJobs.map((job) => (
+                    <tr
+                      key={job.id}
+                      onClick={() => setPreviewJob((prev) => prev?.id === job.id ? null : job)}
+                      className={["group cursor-pointer border-b border-[var(--eh-border)] last:border-0 transition-colors", previewJob?.id === job.id ? "bg-[var(--eh-primary-50)]" : "hover:bg-[var(--surface-base)]"].join(" ")}
                     >
-                      Retry
-                    </button>
-                  }
-                />
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="p-4">
-                <EmptyState
-                  title={tab === "ACTIVE" ? "You haven't posted any jobs yet" : "No jobs found"}
-                  message={
-                    tab === "ACTIVE"
-                      ? "Post your first role to start receiving applications."
-                      : "Try a different tab or adjust your filters."
-                  }
-                  actions={
-                    <Link href="/dashboard/post-job" className="eh-btn eh-btn-primary eh-btn-sm">
-                      <Plus size={13} /> Post a Job
-                    </Link>
-                  }
-                />
-              </div>
-            ) : (
-              filtered.map((job) => (
-                <div
-                  key={job.id}
-                  onClick={() => setPreviewJob((prev) => prev?.id === job.id ? null : job)}
-                  className={[
-                    "group grid min-w-[820px] grid-cols-[2.2fr_0.9fr_0.9fr_0.8fr_0.7fr_0.7fr_56px] items-center border-b border-eh px-4 py-4 last:border-b-0 cursor-pointer transition-colors",
-                    previewJob?.id === job.id
-                      ? "bg-[var(--eh-primary-50)] border-l-2 border-l-[var(--eh-primary-500)]"
-                      : "hover:bg-[var(--surface-base)]",
-                  ].join(" ")}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-eh-text">{job.title}</p>
-                    <p className="truncate text-[12px] text-eh-text3">
-                      Grade {job.gradeLevel} · {closeLabel(job)}
-                    </p>
-                  </div>
-                  <span className="text-[13px] text-eh-text2">{job.subject}</span>
-                  <span className="text-[13px] text-eh-text2">{typeLabel(job.jobType)}</span>
-                  <span className="text-[13px] text-eh-text2">{timeAgo(job.postedAt)}</span>
-                  <div>
-                    <p className="text-[15px] font-semibold text-eh-text">{job._count.applications}</p>
-                    <p className="text-[11px] text-eh-text3">applicants</p>
-                  </div>
-                  <StatusBadge role="status" tone={statusTone[job.status]} dot className="max-w-fit">
-                    {job.status.charAt(0) + job.status.slice(1).toLowerCase()}
-                  </StatusBadge>
-                  {/* Actions */}
-                  <div
-                    className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="relative">
-                      <button
-                        onClick={() => setOpenMenuId((prev) => (prev === job.id ? null : job.id))}
-                        aria-label="Open job actions"
-                        className="rounded-md p-1.5 text-eh-text3 hover:bg-white hover:text-eh-text2 hover:shadow-sm"
-                      >
-                        {updatingStatusId === job.id ? <Loader2 size={15} className="animate-spin" /> : <MoreHorizontal size={15} />}
-                      </button>
-                      {openMenuId === job.id ? (
-                        <div role="menu" className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-eh bg-white p-1 shadow-lg shadow-black/[0.08]">
-                          <button
-                            role="menuitem"
-                            onClick={() => handleEdit(job.id)}
-                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] font-medium text-eh-text2 hover:bg-eh-soft"
-                          >
-                            <Edit2 size={12} /> Edit job
-                          </button>
-                          <button
-                            role="menuitem"
-                            onClick={() => { setPreviewJob(job); setOpenMenuId(null); }}
-                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] font-medium text-eh-text2 hover:bg-eh-soft"
-                          >
-                            <Eye size={12} /> Preview
-                          </button>
-                          <button
-                            role="menuitem"
-                            onClick={() => handleViewApplicants(job.id)}
-                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] font-medium text-eh-text2 hover:bg-eh-soft"
-                          >
-                            <Users size={12} /> View applicants
-                          </button>
-                          <div className="my-1 border-t border-eh" />
-                          {(["ACTIVE", "DRAFT", "CLOSED"] as const).filter((s) => s !== job.status).map((status) => (
-                            <button
-                              key={status}
-                              role="menuitem"
-                              onClick={() => updateStatus(job.id, status)}
-                              className="block w-full rounded-lg px-3 py-2 text-left text-[12px] font-medium text-eh-text2 hover:bg-eh-soft"
-                            >
-                              Mark as {status.toLowerCase()}
-                            </button>
-                          ))}
+                      <td className="px-4 py-4">
+                        <p className="text-[14px] font-semibold text-[var(--eh-text)]">{job.title}</p>
+                        <p className="mt-0.5 text-[12px] text-[var(--eh-text-3)]">{typeLabel(job.jobType)}</p>
+                      </td>
+                      <td className="px-4 py-4 text-[13px] text-[var(--eh-text-2)]">{job.subject}</td>
+                      <td className="px-4 py-4 text-[13px] text-[var(--eh-text-2)]">{job.board || "—"}</td>
+                      <td className="px-4 py-4">
+                        <p className="text-[13px] font-medium text-[var(--eh-text-2)]">{new Date(job.postedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p>
+                        <p className="mt-0.5 text-[11px] text-[var(--eh-text-3)]">{timeAgo(job.postedAt)}</p>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2">
+                          {/* Avatar stack */}
+                          <div className="flex -space-x-2">
+                            {Array.from({ length: Math.min(job._count.applications, 4) }).map((_, i) => (
+                              <div key={i} className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-[var(--eh-primary-100)] text-[9px] font-bold text-[var(--eh-primary-700)]">
+                                {String.fromCharCode(65 + i)}
+                              </div>
+                            ))}
+                          </div>
+                          <div>
+                            <p className="text-[13px] font-semibold text-[var(--eh-text)]">{job._count.applications}</p>
+                            {job._count.applications > 4 && <p className="text-[10px] text-[var(--eh-text-4)]">+{job._count.applications - 4} more</p>}
+                          </div>
                         </div>
-                      ) : null}
-                    </div>
-                  </div>
+                      </td>
+                      <td className="px-4 py-4 text-[13px] font-medium text-[var(--eh-text-2)]">{job.shortlistedCount}</td>
+                      <td className="px-4 py-4">
+                        <StatusBadge role="status" tone={statusTone[job.status]} dot className="max-w-fit">
+                          {job.status.charAt(0) + job.status.slice(1).toLowerCase()}
+                        </StatusBadge>
+                      </td>
+                      <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => { setPreviewJob(job); }} className="eh-btn eh-btn-secondary eh-btn-sm">View</button>
+                          <div className="relative" ref={openMenuId === job.id ? menuRef : undefined}>
+                            <button onClick={() => setOpenMenuId((prev) => (prev === job.id ? null : job.id))} className="rounded-lg border border-[var(--eh-border)] p-1.5 text-[var(--eh-text-4)] transition-colors hover:bg-[var(--surface-base)] hover:text-[var(--eh-text-2)]">
+                              {updatingStatusId === job.id ? <Loader2 size={14} className="animate-spin" /> : <MoreHorizontal size={14} />}
+                            </button>
+                            {openMenuId === job.id && (
+                              <div role="menu" className="eh-popover absolute right-0 z-20 mt-1 w-48">
+                                <button role="menuitem" onClick={() => handleEdit(job.id)} className="eh-popover-item"><Edit2 size={12} /> Edit job</button>
+                                <button role="menuitem" onClick={() => handleViewApplicants(job.id)} className="eh-popover-item"><Users size={12} /> View applicants</button>
+                                <div className="eh-popover-divider" />
+                                {(["ACTIVE", "DRAFT", "CLOSED"] as const).filter((s) => s !== job.status).map((status) => (
+                                  <button key={status} role="menuitem" onClick={() => updateStatus(job.id, status)} className="eh-popover-item">Mark as {status.toLowerCase()}</button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-[var(--eh-border)] px-4 py-3">
+                <p className="text-[13px] text-[var(--eh-text-3)]">
+                  Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} jobs
+                </p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="eh-btn eh-btn-secondary eh-btn-sm disabled:opacity-40">Prev</button>
+                  <span className="rounded-lg bg-[var(--eh-primary-600)] px-3 py-1.5 text-[12px] font-semibold text-white">{page}</span>
+                  <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="eh-btn eh-btn-secondary eh-btn-sm disabled:opacity-40">Next</button>
                 </div>
-              ))
+                <p className="text-[12px] text-[var(--eh-text-3)]">Page {page} of {totalPages}</p>
+              </div>
             )}
-          </DataTable>
+
+          </Panel>
         </div>
 
-        {/* Inline job preview panel */}
-        {previewJob ? (
-          <div className="hidden xl:flex flex-col rounded-xl border border-[var(--eh-border)] bg-white shadow-sm overflow-hidden h-fit sticky top-4">
-            <JobPreviewPanel
-              job={previewJob}
-              onClose={() => setPreviewJob(null)}
-              onViewApplicants={handleViewApplicants}
-              onEdit={handleEdit}
-            />
-          </div>
-        ) : null}
+        {/* Right panel: inline preview OR plan sidebar */}
+        <div className="hidden xl:flex flex-col gap-4 sticky top-4 h-fit">
+          {previewJob ? (
+            <div className="flex flex-col rounded-xl border border-[var(--eh-border)] bg-white shadow-sm overflow-hidden animate-panel-slide-in">
+              <JobPreviewPanel
+                job={previewJob}
+                onClose={() => setPreviewJob(null)}
+                onViewApplicants={handleViewApplicants}
+                onEdit={handleEdit}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Plan usage card */}
+              {(() => {
+                const planName = billing?.plan ?? "FREE";
+                const planLabel = planName.charAt(0) + planName.slice(1).toLowerCase();
+                const used = billing?.postsUsed ?? counts.ACTIVE;
+                const limit = billing ? billing.postsLimit : null;
+                const isUnlimited = billing != null && billing.postsLimit === null;
+                const pct = isUnlimited ? (used > 0 ? 100 : 0) : limit ? Math.min((used / limit) * 100, 100) : 0;
+                return (
+                  <Panel className="p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-[13px] font-semibold text-[var(--eh-text)]">Your Plan Usage</h3>
+                      <StatusBadge tone="brand">{planLabel} Plan</StatusBadge>
+                    </div>
+                    <div className="mb-1 flex items-center justify-between text-[13px]">
+                      <span className="text-[var(--eh-text-3)]">Active job posts used</span>
+                      <span className="font-semibold text-[var(--eh-text)]">{used} / {isUnlimited ? "∞" : limit ?? "—"}</span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-base)]">
+                      <div className="h-full rounded-full bg-[var(--eh-primary-600)] transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <Link href="/dashboard/billing" className="mt-4 block w-full text-center rounded-lg border border-[var(--eh-border)] px-3 py-2 text-[12px] font-semibold text-[var(--eh-text-2)] hover:bg-[var(--surface-base)] transition-colors">
+                      View Plan
+                    </Link>
+                  </Panel>
+                );
+              })()}
+              {/* Upgrade nudge */}
+              <Panel className="p-5">
+                <p className="text-[13px] font-semibold text-[var(--eh-text)] mb-1">Need more job posts?</p>
+                <p className="text-[12px] text-[var(--eh-text-3)] leading-[1.6] mb-3">Upgrade your plan to post more jobs and reach more qualified candidates.</p>
+                <Link href="/dashboard/billing" className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--eh-primary-600)] hover:text-[var(--eh-primary-800)]">
+                  Upgrade Plan <ArrowRight size={12} />
+                </Link>
+              </Panel>
+              {/* Managed recruitment */}
+              <Panel className="p-5">
+                <p className="text-[13px] font-semibold text-[var(--eh-text)] mb-1">Let EduHire handle your recruitment</p>
+                <p className="text-[12px] text-[var(--eh-text-3)] leading-[1.6] mb-3">We source, screen, and coordinate candidates so you can focus on students, not hiring.</p>
+                <ul className="space-y-1.5 mb-4">
+                  {["Verified & pre-screened candidates", "End-to-end hiring support", "Faster hiring, better quality"].map((feat) => (
+                    <li key={feat} className="flex items-center gap-1.5 text-[12px] text-[var(--eh-text-3)]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" /> {feat}
+                    </li>
+                  ))}
+                </ul>
+                <Link href="/dashboard/managed-recruitment" className="eh-btn eh-btn-primary w-full justify-center">
+                  Explore Managed Recruitment
+                </Link>
+              </Panel>
+            </>
+          )}
+        </div>
       </div>
     </PageShell>
   );

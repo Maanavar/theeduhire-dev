@@ -1,56 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import {
   ArrowRight,
   CheckCircle2,
-  CreditCard,
-  Lock,
-  Sparkles,
-  TrendingUp,
-  Users,
-  Zap,
 } from "lucide-react";
 import { PageShell, PageHeader } from "@/components/layout/page-shell";
-
-type BillingInfo = {
-  plan: "FREE" | "GROWTH" | "PRO";
-  status: string;
-  postsUsed: number;
-  postsLimit: number | null; // null = unlimited
-  cycleResetAt: string | null;
-};
-
-const PLAN_FEATURES: Record<string, { label: string; plans: string[] }[]> = {
-  FREE: [
-    { label: "2 active job posts per month", plans: ["FREE", "GROWTH", "PRO"] },
-    { label: "Basic applicant list", plans: ["FREE", "GROWTH", "PRO"] },
-    { label: "School profile & trust badge", plans: ["FREE", "GROWTH", "PRO"] },
-    { label: "WhatsApp interview reminders", plans: ["FREE", "GROWTH", "PRO"] },
-    { label: "AI match score shortlisting", plans: ["GROWTH", "PRO"] },
-    { label: "Teacher phone & WhatsApp reveal", plans: ["GROWTH", "PRO"] },
-    { label: "Analytics dashboard", plans: ["PRO"] },
-  ],
-  GROWTH: [
-    { label: "10 active job posts per month", plans: ["GROWTH", "PRO"] },
-    { label: "AI match score shortlisting", plans: ["GROWTH", "PRO"] },
-    { label: "Teacher phone & WhatsApp reveal", plans: ["GROWTH", "PRO"] },
-    { label: "Demo video & lesson plan access", plans: ["GROWTH", "PRO"] },
-    { label: "Interview scheduling dashboard", plans: ["GROWTH", "PRO"] },
-    { label: "WhatsApp interview reminders", plans: ["FREE", "GROWTH", "PRO"] },
-    { label: "Analytics dashboard", plans: ["PRO"] },
-  ],
-  PRO: [
-    { label: "Unlimited active job posts", plans: ["PRO"] },
-    { label: "AI match score shortlisting", plans: ["GROWTH", "PRO"] },
-    { label: "Teacher phone & WhatsApp reveal", plans: ["GROWTH", "PRO"] },
-    { label: "Demo video & lesson plan access", plans: ["GROWTH", "PRO"] },
-    { label: "Interview scheduling dashboard", plans: ["GROWTH", "PRO"] },
-    { label: "Analytics & hiring funnel dashboard", plans: ["PRO"] },
-    { label: "WhatsApp interview reminders", plans: ["FREE", "GROWTH", "PRO"] },
-  ],
-};
+import { getBillingPlan, type BillingPlan as BillingInfo } from "@/lib/api/billing-client";
 
 const PLAN_BADGE: Record<string, { label: string; color: string }> = {
   FREE: { label: "Free", color: "bg-[var(--surface-base)] text-[var(--eh-text-2)] border border-[var(--eh-border)]" },
@@ -63,18 +19,10 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch("/api/billing/plan");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) setBilling(data.data);
-        }
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
+    getBillingPlan()
+      .then(setBilling)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -96,166 +44,238 @@ export default function BillingPage() {
   const isUnlimited = billing?.postsLimit === null;
   const usagePercent = isUnlimited ? 0 : Math.min(100, Math.round((postsUsed / postsLimit) * 100));
   const badge = PLAN_BADGE[plan];
-  const features = PLAN_FEATURES[plan] ?? PLAN_FEATURES.FREE;
   const upgradeTarget = plan === "FREE" ? "Growth" : plan === "GROWTH" ? "Pro" : null;
+
+  const PLANS = [
+    {
+      key: "FREE",
+      label: "FREE",
+      price: "₹0",
+      period: "/month",
+      tagline: "Ideal for getting started",
+      posts: "Up to 2 active job posts",
+      cta: plan === "FREE" ? "Current Plan" : "Get Started",
+      isCurrent: plan === "FREE",
+      isUpgrade: plan !== "FREE",
+      isPro: false,
+    },
+    {
+      key: "GROWTH",
+      label: "GROWTH",
+      price: "₹4,999",
+      period: "/month",
+      tagline: "For growing schools",
+      posts: "Up to 10 active job posts",
+      cta: plan === "GROWTH" ? "Current Plan" : "Upgrade to Growth",
+      isCurrent: plan === "GROWTH",
+      isUpgrade: plan === "FREE",
+      isPro: false,
+    },
+    {
+      key: "PRO",
+      label: "PRO",
+      price: "₹9,999",
+      period: "/month",
+      tagline: "For high-volume hiring",
+      posts: "Unlimited active job posts",
+      cta: plan === "PRO" ? "Current Plan" : "Upgrade to Pro",
+      isCurrent: plan === "PRO",
+      isUpgrade: plan !== "PRO",
+      isPro: true,
+    },
+  ];
+
+  const ALL_FEATURES = [
+    { label: "Active Job Posts", free: "Up to 2", growth: "Up to 10", pro: "Unlimited" },
+    { label: "AI Shortlist", free: "Limited (10/month)", growth: "Unlimited", pro: "Unlimited" },
+    { label: "Teacher Contact Reveal", free: "10 reveals/month", growth: "100 reveals/month", pro: "250 reveals/month" },
+    { label: "Analytics", free: "Basic", growth: "Full Access", pro: "Advanced" },
+    { label: "Priority Support", free: "—", growth: "✓", pro: "✓" },
+    { label: "Managed Recruitment Discounts", free: "—", growth: "10% off", pro: "20% off" },
+    { label: "Team Seats", free: "1 Admin", growth: "Up to 5 Admins", pro: "Up to 15 Admins" },
+  ];
 
   return (
     <PageShell>
       <PageHeader
         title="Billing & Plan"
-        subtitle="Manage your subscription and view usage"
-        eyebrow="Account"
+        subtitle="Manage your subscription, billing, and unlock more hiring power for your school."
       />
 
-      {/* Current plan */}
-      <div className="rounded-[24px] border border-[var(--eh-border)] bg-white p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-[var(--eh-text-4)]">Current plan</p>
-            <div className="mt-2 flex items-center gap-3">
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-semibold ${badge.color}`}>
-                <CreditCard size={13} />
-                {badge.label}
-              </span>
-              {billing?.status && billing.status !== "ACTIVE" && (
-                <span className="rounded-full bg-[var(--eh-warning-bg)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--eh-warning)] ring-1 ring-[var(--eh-warning-border)]">
-                  {billing.status.replace("_", " ")}
-                </span>
-              )}
-            </div>
+      {/* Usage KPI Row */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        <div className="rounded-xl border border-[var(--eh-border)] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--eh-text-4)] mb-2">Active Job Posts</p>
+          <p className="text-[22px] font-semibold text-[var(--eh-primary-700)]">{postsUsed} / {isUnlimited ? "∞" : postsLimit}</p>
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-base)]">
+            <div className={["h-full rounded-full", usagePercent >= 90 ? "bg-red-500" : usagePercent >= 60 ? "bg-amber-400" : "bg-[var(--eh-primary-600)]"].join(" ")} style={{ width: `${usagePercent}%` }} />
           </div>
-          {upgradeTarget && (
+          <p className="mt-1 text-[11px] text-[var(--eh-text-4)]">{usagePercent}% used</p>
+        </div>
+        {[
+          { label: "AI Shortlist Access", value: plan !== "FREE" ? "Unlimited" : "Limited", sub: plan !== "FREE" ? "Included" : "Upgrade" },
+          { label: "Contact Reveal Access", value: plan === "FREE" ? "10" : plan === "GROWTH" ? "50 / 100" : "Unlimited", sub: "reveals/month" },
+          { label: "Analytics", value: plan === "PRO" ? "Advanced" : plan === "GROWTH" ? "Full Access" : "Basic", sub: plan !== "FREE" ? "Included" : "Upgrade" },
+          { label: "Billing Status", value: billing?.status === "ACTIVE" ? "Current" : billing?.status?.replace("_", " ") || "Active", sub: "Up to date" },
+        ].map((m) => (
+          <div key={m.label} className="rounded-xl border border-[var(--eh-border)] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--eh-text-4)] mb-2">{m.label}</p>
+            <p className="text-[16px] font-semibold text-[var(--eh-text)]">{m.value}</p>
+            <p className="mt-1 text-[11px] text-emerald-600 font-medium">{m.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+        <div className="space-y-5">
+          {/* Plan cards */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            {PLANS.map((p) => (
+              <div
+                key={p.key}
+                className={[
+                  "relative rounded-xl border p-5 transition-all",
+                  p.isCurrent
+                    ? "border-[var(--eh-primary-300)] bg-[var(--eh-primary-50)] shadow-[0_0_0_2px_var(--eh-primary-200)]"
+                    : "border-[var(--eh-border)] bg-white hover:border-[var(--eh-border-strong)]",
+                ].join(" ")}
+              >
+                {p.isCurrent && (
+                  <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-[var(--eh-primary-600)] px-3 py-0.5 text-[10px] font-bold text-white">
+                    Current Plan
+                  </span>
+                )}
+                <p className={`text-[13px] font-bold tracking-[0.06em] ${p.isCurrent ? "text-[var(--eh-primary-700)]" : "text-[var(--eh-text-2)]"}`}>{p.label}</p>
+                <div className="mt-2 flex items-baseline gap-0.5">
+                  <span className={`text-[26px] font-bold tracking-[-0.02em] ${p.isCurrent ? "text-[var(--eh-primary-700)]" : "text-[var(--eh-text)]"}`}>{p.price}</span>
+                  <span className="text-[12px] text-[var(--eh-text-3)]">{p.period}</span>
+                </div>
+                <p className="mt-1 text-[12px] text-[var(--eh-text-3)]">{p.tagline}</p>
+                <p className="mt-3 text-[12px] font-semibold text-[var(--eh-primary-700)]">{p.posts}</p>
+                {p.isCurrent ? (
+                  <button disabled className="mt-4 w-full rounded-lg bg-[var(--eh-primary-600)] py-2 text-[13px] font-semibold text-white opacity-90">Current Plan</button>
+                ) : p.isUpgrade ? (
+                  <a
+                    href={`mailto:hello@theeduhire.in?subject=Upgrade to ${p.label} plan — EduHire`}
+                    className="mt-4 block w-full rounded-lg border border-[var(--eh-border)] py-2 text-center text-[13px] font-semibold text-[var(--eh-text-2)] hover:bg-[var(--surface-base)] transition-colors"
+                  >
+                    {p.cta}
+                  </a>
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          {/* Feature comparison table */}
+          <div className="rounded-xl border border-[var(--eh-border)] bg-white overflow-hidden">
+            <div className="border-b border-[var(--eh-border)] px-5 py-4">
+              <h3 className="text-[14px] font-semibold text-[var(--eh-text)]">Features</h3>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-[var(--eh-border)] bg-[var(--surface-base)]">
+                  <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">Feature</th>
+                  {["FREE", "GROWTH", "PRO"].map((p) => (
+                    <th key={p} className={["px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em]", plan === p ? "text-[var(--eh-primary-700)]" : "text-[var(--eh-text-4)]"].join(" ")}>
+                      {p} {plan === p && <span className="ml-1 text-[9px] font-bold rounded-full bg-[var(--eh-primary-100)] px-1.5 py-0.5">Current</span>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--eh-border)]">
+                {ALL_FEATURES.map((feat) => (
+                  <tr key={feat.label} className="hover:bg-[var(--surface-base)] transition-colors">
+                    <td className="px-5 py-3 text-[13px] font-medium text-[var(--eh-text-2)]">{feat.label}</td>
+                    {[feat.free, feat.growth, feat.pro].map((val, i) => (
+                      <td key={i} className={["px-4 py-3 text-center text-[12px]", val === "—" ? "text-[var(--eh-text-4)]" : val === "✓" ? "text-emerald-600 font-bold" : "text-[var(--eh-text-2)] font-medium", i === (plan === "FREE" ? 0 : plan === "GROWTH" ? 1 : 2) ? "text-[var(--eh-primary-700)] font-semibold" : ""].join(" ")}>
+                        {val === "✓" ? <CheckCircle2 size={14} className="mx-auto text-emerald-500" /> : val}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Right sidebar */}
+        <div className="flex flex-col gap-4">
+          {/* Current plan card */}
+          <div className="rounded-xl border border-[var(--eh-border)] bg-white p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[13px] font-semibold text-[var(--eh-text)]">Current Plan</h3>
+              <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${badge.color}`}>{badge.label} Plan</span>
+            </div>
+            <p className="text-[28px] font-bold tracking-[-0.02em] text-[var(--eh-primary-700)]">{postsUsed} / {isUnlimited ? "∞" : postsLimit}</p>
+            <p className="text-[12px] text-[var(--eh-text-3)]">Active job posts used</p>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-base)]">
+              <div className="h-full rounded-full bg-[var(--eh-primary-600)] transition-all" style={{ width: `${usagePercent}%` }} />
+            </div>
+            {billing?.cycleResetAt && (
+              <p className="mt-2 text-[11px] text-[var(--eh-text-4)]">Renews on {new Date(billing.cycleResetAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</p>
+            )}
+            {upgradeTarget && (
+              <a
+                href={`mailto:hello@theeduhire.in?subject=Upgrade to ${upgradeTarget} plan — EduHire`}
+                className="mt-4 block w-full text-center rounded-lg bg-[var(--eh-primary-600)] py-2 text-[13px] font-semibold text-white hover:bg-[var(--eh-primary-700)] transition-colors"
+              >
+                Upgrade Plan
+              </a>
+            )}
             <a
-              href={`mailto:hello@theeduhire.in?subject=Upgrade to ${upgradeTarget} plan — EduHire&body=Hi EduHire team,%0A%0AI'd like to upgrade my school account to the ${upgradeTarget} plan. Please share the invoice and next steps.%0A%0AThanks`}
-              className="eh-btn eh-btn-primary shrink-0 shadow-[0_4px_14px_rgba(10,102,194,0.2)]"
-              title="Opens your email app"
+              href="mailto:hello@theeduhire.in?subject=Manage subscription — EduHire"
+              className="mt-2 block w-full text-center rounded-lg border border-[var(--eh-border)] py-2 text-[13px] font-semibold text-[var(--eh-text-2)] hover:bg-[var(--surface-base)] transition-colors"
             >
-              Email us to upgrade <ArrowRight size={13} />
+              Manage Subscription
             </a>
+          </div>
+
+          {/* Upgrade nudge */}
+          {upgradeTarget && (
+            <div className="rounded-xl border border-[var(--eh-border)] bg-white p-5">
+              <p className="text-[13px] font-semibold text-[var(--eh-text)] mb-1">Need more hiring power?</p>
+              <p className="text-[12px] text-[var(--eh-text-3)] leading-[1.6] mb-3">Upgrade your plan to post more jobs, access advanced features, and hire better, faster.</p>
+              <ul className="space-y-1.5 mb-4">
+                {["Post more active jobs", "Unlock managed recruitment discounts", "Priority support & faster response"].map((feat) => (
+                  <li key={feat} className="flex items-center gap-1.5 text-[12px] text-[var(--eh-text-3)]">
+                    <CheckCircle2 size={12} className="text-emerald-500 shrink-0" /> {feat}
+                  </li>
+                ))}
+              </ul>
+              <a
+                href={`mailto:hello@theeduhire.in?subject=Upgrade to ${upgradeTarget} plan — EduHire`}
+                className="eh-btn eh-btn-primary w-full justify-center"
+              >
+                Upgrade Now <ArrowRight size={13} />
+              </a>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Post usage meter */}
-      <div className="rounded-[24px] border border-[var(--eh-border)] bg-white p-6">
-        <div className="flex items-center gap-2 text-[14px] font-semibold text-[var(--eh-text)]">
-          <TrendingUp size={16} className="text-[var(--color-brand-600)]" />
-          Job posts this cycle
+      {/* Billing History */}
+      <div className="rounded-xl border border-[var(--eh-border)] bg-white overflow-hidden">
+        <div className="flex items-center justify-between border-b border-[var(--eh-border)] px-5 py-4">
+          <h3 className="text-[14px] font-semibold text-[var(--eh-text)]">Billing History</h3>
         </div>
-        <div className="mt-4 flex items-end justify-between">
-          <p className="text-[2rem] font-semibold tracking-[-0.03em] text-[var(--eh-text)]">
-            {postsUsed}
-            <span className="ml-1 text-[1.1rem] font-normal text-[var(--eh-text-3)]">
-              / {isUnlimited ? "∞" : postsLimit}
-            </span>
-          </p>
-          <p className="text-[13px] text-[var(--eh-text-4)]">
-            {isUnlimited ? "Unlimited posts" : `${postsLimit - postsUsed} posts remaining`}
-          </p>
-        </div>
-        {!isUnlimited && (
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--surface-base)]">
-            <div
-              className={[
-                "h-full rounded-full transition-all",
-                usagePercent >= 90 ? "bg-[var(--eh-danger)]" : usagePercent >= 60 ? "bg-[var(--eh-warning)]" : "bg-[var(--color-brand-600)]",
-              ].join(" ")}
-              style={{ width: `${usagePercent}%` }}
-            />
-          </div>
-        )}
-        {billing?.cycleResetAt && (
-          <p className="mt-2 text-[12px] text-[var(--eh-text-4)]">
-            Resets on {new Date(billing.cycleResetAt).toLocaleDateString("en-IN", { day: "numeric", month: "long" })}
-          </p>
-        )}
-      </div>
-
-      {/* Feature list */}
-      <div className="rounded-[24px] border border-[var(--eh-border)] bg-white p-6">
-        <p className="text-[13px] font-semibold text-[var(--eh-text)]">What's included in your plan</p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          {features.map((f) => {
-            const included = f.plans.includes(plan);
-            return (
-              <div
-                key={f.label}
-                className={[
-                  "flex items-start gap-2.5 rounded-xl px-3 py-2.5 text-[13.5px]",
-                  included
-                    ? "bg-[var(--color-brand-50)] border border-[var(--color-brand-100)]"
-                    : "bg-amber-50 border border-amber-100",
-                ].join(" ")}
-              >
-                {included ? (
-                  <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-[var(--color-brand-600)]" />
-                ) : (
-                  <Lock size={15} className="mt-0.5 shrink-0 text-amber-500" />
-                )}
-                <span className={included ? "font-medium text-[var(--color-brand-800)]" : "text-amber-800"}>
-                  {f.label}
-                  {!included && (
-                    <span className="ml-1.5 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                      {f.plans[0]}+
-                    </span>
-                  )}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Upgrade CTA */}
-      {upgradeTarget && (
-        <div className="rounded-[24px] border border-[var(--color-brand-200)] bg-[var(--color-brand-50)] p-6">
-          <div className="flex items-start gap-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-brand-600)] text-white">
-              <Sparkles size={18} />
-            </div>
-            <div className="flex-1">
-              <p className="text-[14.5px] font-semibold text-[var(--eh-text)]">
-                Unlock {upgradeTarget} features
-              </p>
-              <p className="mt-1 text-[13.5px] leading-[1.7] text-[var(--eh-text-2)]">
-                {upgradeTarget === "Growth"
-                  ? "Get AI match score shortlisting, teacher contact details reveal, and 10 active posts per month."
-                  : "Get unlimited posts and the full analytics dashboard to track your hiring funnel."}
-              </p>
-              <a
-                href={`mailto:hello@theeduhire.in?subject=Upgrade to ${upgradeTarget} plan — EduHire&body=Hi EduHire team,%0A%0AI'd like to upgrade my school account to the ${upgradeTarget} plan. Please share the invoice and next steps.%0A%0AThanks`}
-                className="eh-btn eh-btn-primary mt-4 inline-flex shadow-[0_4px_14px_rgba(10,102,194,0.2)]"
-              >
-                Email us to upgrade <ArrowRight size={13} />
-              </a>
-              <p className="mt-2 text-[12px] text-[var(--eh-text-4)]">
-                Opens your email app — we reply within 1 business day with invoice and activation.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Managed Recruitment callout */}
-      <div className="rounded-[24px] bg-[#0a1929] p-6 text-white">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Users size={16} className="text-[#60a5fa]" />
-              <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-[#93c5fd]">Managed recruitment</p>
-            </div>
-            <p className="mt-2 text-[15px] font-semibold">Don't have time to hire? We do it for you.</p>
-            <p className="mt-1 text-[13px] leading-[1.7] text-white/55">
-              Submit a JD, we source and shortlist teachers. Pay ₹10,000 only on a confirmed hire.
-            </p>
-          </div>
-          <Link
-            href="/managed-recruitment"
-            className="eh-btn shrink-0 rounded-xl bg-white px-5 py-2.5 text-[13.5px] font-semibold text-[#0a1929] hover:bg-white/90"
-          >
-            Submit a requirement <Zap size={13} />
-          </Link>
-        </div>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-[var(--eh-border)] bg-[var(--surface-base)]">
+              {["Invoice #", "Billing Cycle", "Amount", "Payment Status", "Date", "Action"].map((h) => (
+                <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--eh-text-4)]">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--eh-border)]">
+            <tr>
+              <td colSpan={6} className="px-5 py-8 text-center text-[13px] text-[var(--eh-text-3)]">
+                {plan === "FREE"
+                  ? "No billing history available on the Free plan."
+                  : "No invoices yet. Your invoices will appear here after your first billing cycle."}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </PageShell>
   );

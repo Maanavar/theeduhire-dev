@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma, NotificationType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
-const db = prisma as any;
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, Number(searchParams.get("page") || 1));
     const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit") || 20)));
 
-    const where: any = { userId: auth.user.id };
+    const where: Prisma.NotificationWhereInput = { userId: auth.user.id };
     if (tab === "unread") {
       where.archivedAt = null;
       where.readAt = null;
@@ -23,17 +23,17 @@ export async function GET(req: NextRequest) {
     } else {
       where.archivedAt = null;
     }
-    if (type) where.type = type;
+    if (type) where.type = type as NotificationType;
 
     const [items, total, unreadCount] = await Promise.all([
-      db.notification.findMany({
+      prisma.notification.findMany({
         where,
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
         take: limit,
       }),
-      db.notification.count({ where }),
-      db.notification.count({ where: { userId: auth.user.id, archivedAt: null, readAt: null } }),
+      prisma.notification.count({ where }),
+      prisma.notification.count({ where: { userId: auth.user.id, archivedAt: null, readAt: null } }),
     ]);
 
     return NextResponse.json({
